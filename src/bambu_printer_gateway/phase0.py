@@ -91,8 +91,9 @@ class StatusRecorder:
             with self.command_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
             result = str(values.get("result") or "").lower()
-            reason = values.get("reason") or values.get("fail_reason")
-            if (result and result not in {"success", "ok"}) or reason:
+            reason = str(values.get("reason") or values.get("fail_reason") or "")
+            failed = result not in {"success", "ok"} if result else reason.lower() not in {"", "success", "ok"}
+            if failed:
                 self._command_failure = str(
                     reason or f"result={result or 'unknown'}, msg={values.get('msg')}"
                 )

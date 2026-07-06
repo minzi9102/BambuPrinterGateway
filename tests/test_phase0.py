@@ -60,8 +60,8 @@ class DeviceSafetyTests(unittest.TestCase):
                 {
                     "command": "project_file",
                     "sequence_id": "0",
-                    "result": None,
-                    "reason": None,
+                    "result": "success",
+                    "reason": "success",
                     "msg": 1,
                 }
             )
