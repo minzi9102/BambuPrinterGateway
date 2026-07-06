@@ -9,6 +9,7 @@ from bambu_printer_gateway.phase0 import (
     Phase0Error,
     PrinterConfig,
     START_GCODE,
+    check_printer_port,
     start_after_confirmation,
     upload_and_verify,
     upload_file,
@@ -45,6 +46,11 @@ class FileValidationTests(unittest.TestCase):
 
 
 class DeviceSafetyTests(unittest.TestCase):
+    def test_unreachable_mqtt_port_is_reported_before_client_creation(self):
+        connect = Mock(side_effect=TimeoutError)
+        with self.assertRaisesRegex(Phase0Error, "host:8883"):
+            check_printer_port("host", 1, connect)
+
     def test_upload_timeout_is_reported(self):
         run = Mock(side_effect=subprocess.TimeoutExpired("curl", 10))
         with self.assertRaisesRegex(Phase0Error, "超过 10 秒"):

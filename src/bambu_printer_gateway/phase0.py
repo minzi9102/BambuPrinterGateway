@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import shutil
+import socket
 import subprocess
 import threading
 import uuid
@@ -120,6 +121,20 @@ def find_curl(run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.
 
 def redact(text: str, secret: str) -> str:
     return text.replace(secret, "***") if secret else text
+
+
+def check_printer_port(
+    host: str,
+    timeout: int,
+    connect: Callable[..., socket.socket] = socket.create_connection,
+) -> None:
+    try:
+        with connect((host, 8883), timeout=timeout):
+            pass
+    except OSError as error:
+        raise Phase0Error(
+            f"无法连接打印机 {host}:8883；请检查 PRINTER_HOST、局域网、LAN Mode 和防火墙"
+        ) from error
 
 
 def upload_file(
@@ -239,6 +254,7 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
     gcode_entry = validate_print_file(local_path)
     curl = find_curl()
     config = PrinterConfig.from_env()
+    check_printer_port(config.host, args.connect_timeout)
     remote_name = f"phase0_{uuid.uuid4().hex[:8]}.gcode.3mf"
     artifact_dir = Path(args.artifacts_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
