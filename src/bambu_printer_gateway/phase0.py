@@ -75,18 +75,18 @@ class StatusRecorder:
             f"progress={state['mc_percent']} layer={state['layer_num']}/{state['total_layer_num']}"
         )
 
-    def task_signature(self) -> tuple[object, object, object] | None:
+    def state_signature(self) -> object:
         with self._lock:
-            return self._task_signature()
+            return self._state_signature()
 
-    def wait_for_task_change(
+    def wait_for_state_change(
         self,
-        previous: tuple[object, object, object] | None,
+        previous: object,
         timeout: int,
     ) -> dict[str, object]:
         deadline = time.monotonic() + timeout
         with self._changed:
-            while self._task_signature() == previous:
+            while self._state_signature() == previous:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise Phase0Error(
@@ -96,10 +96,8 @@ class StatusRecorder:
                 self._changed.wait(remaining)
             return dict(self._last or {})
 
-    def _task_signature(self) -> tuple[object, object, object] | None:
-        if self._last is None:
-            return None
-        return tuple(self._last[field] for field in ("gcode_state", "subtask_name", "gcode_file"))
+    def _state_signature(self) -> object:
+        return None if self._last is None else self._last["gcode_state"]
 
 
 def now() -> str:
@@ -231,23 +229,35 @@ def upload_and_verify(
     curl: str,
     config: PrinterConfig,
     local_path: Path,
-    remote_name: str,
+    remote_path: str,
     timeout: int,
 ) -> None:
-    upload_file(curl, config, local_path, remote_name, timeout)
-    if remote_name not in client.get_files("/", ".3mf"):
-        raise Phase0Error(f"上传后未在打印机根目录找到 {remote_name}")
+    upload_file(curl, config, local_path, remote_path, timeout)
+    remote = Path(remote_path)
+    if remote.name not in client.get_files(f"/{remote.parent.as_posix()}/", ".3mf"):
+        raise Phase0Error(f"上传后未在打印机中找到 {remote_path}")
 
 
 def start_after_confirmation(
     client: BambuClient,
     remote_name: str,
+    remote_path: str,
     input_fn: Callable[[str], str] = input,
 ) -> None:
     expected = f"START {remote_name}"
     if input_fn(f"确认打印板已清理，输入“{expected}”启动打印：").strip() != expected:
         raise Phase0Error("操作员取消启动；文件已上传，但未发送打印命令")
-    client.start_print(remote_name)
+    client.executeClient.send_command(
+        json.dumps(
+            {
+                "print": {
+                    "sequence_id": "0",
+                    "command": "gcode_file",
+                    "param": remote_path,
+                }
+            }
+        )
+    )
 
 
 def wait_for_operator(label: str, input_fn: Callable[[str], str] = input) -> str:
@@ -309,6 +319,7 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
     config = PrinterConfig.from_env()
     check_printer_port(config.host, args.connect_timeout)
     remote_name = f"phase0_{uuid.uuid4().hex[:8]}.gcode.3mf"
+    remote_path = f"cache/{remote_name}"
     artifact_dir = Path(args.artifacts_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     log_path = artifact_dir / f"{datetime.now():%Y%m%d-%H%M%S}-{remote_name}.jsonl"
@@ -330,11 +341,11 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
         client.dump_info()
         if not recorder.received.wait(args.connect_timeout):
             raise Phase0Error("MQTT 已连接，但未收到打印机状态")
-        upload_and_verify(client, curl, config, local_path, remote_name, args.upload_timeout)
-        print(f"上传并确认成功：{remote_name}")
-        previous_task = recorder.task_signature()
-        start_after_confirmation(client, remote_name, input_fn)
-        confirmed = recorder.wait_for_task_change(previous_task, args.start_timeout)
+        upload_and_verify(client, curl, config, local_path, remote_path, args.upload_timeout)
+        print(f"上传并确认成功：{remote_path}")
+        previous_state = recorder.state_signature()
+        start_after_confirmation(client, remote_name, remote_path, input_fn)
+        confirmed = recorder.wait_for_state_change(previous_state, args.start_timeout)
         print(
             f"MQTT 已确认任务状态变化：state={confirmed['gcode_state']} "
             f"task={confirmed['subtask_name']}"

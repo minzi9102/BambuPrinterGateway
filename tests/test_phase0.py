@@ -1,3 +1,4 @@
+import json
 import subprocess
 import tempfile
 import unittest
@@ -53,10 +54,10 @@ class DeviceSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             recorder = StatusRecorder(Path(directory, "states.jsonl"))
             recorder.record(SimpleNamespace(gcode_state="FINISH", subtask_name="old", gcode_file=""))
-            previous = recorder.task_signature()
+            previous = recorder.state_signature()
             recorder.record(SimpleNamespace(gcode_state="RUNNING", subtask_name="new", gcode_file=""))
 
-            confirmed = recorder.wait_for_task_change(previous, 1)
+            confirmed = recorder.wait_for_state_change(previous, 1)
 
         self.assertEqual(confirmed["gcode_state"], "RUNNING")
 
@@ -92,23 +93,42 @@ class DeviceSafetyTests(unittest.TestCase):
     def test_missing_remote_file_stops_flow(self, mocked_upload):
         client = Mock()
         client.get_files.return_value = []
-        with self.assertRaisesRegex(Phase0Error, "未在打印机根目录找到"):
+        with self.assertRaisesRegex(Phase0Error, "未在打印机中找到"):
             upload_and_verify(
                 client,
                 "curl",
                 PrinterConfig("host", "secret", "serial"),
                 Path("x"),
-                "remote.gcode.3mf",
+                "cache/remote.gcode.3mf",
                 10,
             )
-        client.start_print.assert_not_called()
+        client.executeClient.send_command.assert_not_called()
         mocked_upload.assert_called_once()
 
     def test_operator_cancellation_never_starts_print(self):
         client = Mock()
         with self.assertRaisesRegex(Phase0Error, "取消启动"):
-            start_after_confirmation(client, "remote.gcode.3mf", lambda _: "no")
-        client.start_print.assert_not_called()
+            start_after_confirmation(
+                client,
+                "remote.gcode.3mf",
+                "cache/remote.gcode.3mf",
+                lambda _: "no",
+            )
+        client.executeClient.send_command.assert_not_called()
+
+    def test_p1s_start_uses_cache_gcode_command(self):
+        client = Mock()
+
+        start_after_confirmation(
+            client,
+            "remote.gcode.3mf",
+            "cache/remote.gcode.3mf",
+            lambda _: "START remote.gcode.3mf",
+        )
+
+        payload = json.loads(client.executeClient.send_command.call_args.args[0])
+        self.assertEqual(payload["print"]["command"], "gcode_file")
+        self.assertEqual(payload["print"]["param"], "cache/remote.gcode.3mf")
 
 
 if __name__ == "__main__":
