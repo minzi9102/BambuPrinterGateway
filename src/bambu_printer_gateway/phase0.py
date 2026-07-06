@@ -91,12 +91,10 @@ class StatusRecorder:
             with self.command_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
             result = str(values.get("result") or "").lower()
-            msg = str(values.get("msg") if values.get("msg") is not None else "0")
-            if (result and result not in {"success", "ok"}) or msg != "0":
+            reason = values.get("reason") or values.get("fail_reason")
+            if (result and result not in {"success", "ok"}) or reason:
                 self._command_failure = str(
-                    values.get("reason")
-                    or values.get("fail_reason")
-                    or f"result={result or 'unknown'}, msg={msg}"
+                    reason or f"result={result or 'unknown'}, msg={values.get('msg')}"
                 )
             self._changed.notify_all()
         print(
@@ -312,8 +310,24 @@ def start_after_confirmation(
             {
                 "print": {
                     "sequence_id": "0",
-                    "command": "gcode_file",
-                    "param": f"/sdcard/{remote_path}",
+                    "command": "project_file",
+                    "param": START_GCODE,
+                    "project_id": "0",
+                    "profile_id": "0",
+                    "task_id": "0",
+                    "subtask_id": "0",
+                    "subtask_name": remote_name.removesuffix(".3mf"),
+                    "file": "",
+                    "url": f"file:///sdcard/{remote_path}",
+                    "md5": "",
+                    "timelapse": False,
+                    "bed_type": "auto",
+                    "bed_levelling": True,
+                    "flow_cali": False,
+                    "vibration_cali": True,
+                    "layer_inspect": True,
+                    "ams_mapping": [],
+                    "use_ams": False,
                 }
             }
         )

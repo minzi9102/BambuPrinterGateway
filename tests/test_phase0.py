@@ -56,6 +56,15 @@ class DeviceSafetyTests(unittest.TestCase):
             recorder = StatusRecorder(Path(directory, "states.jsonl"))
             recorder.record(SimpleNamespace(gcode_state="FINISH", subtask_name="old", gcode_file=""))
             previous = recorder.state_signature()
+            recorder.record_command(
+                {
+                    "command": "project_file",
+                    "sequence_id": "0",
+                    "result": None,
+                    "reason": None,
+                    "msg": 1,
+                }
+            )
             recorder.record(SimpleNamespace(gcode_state="RUNNING", subtask_name="new", gcode_file=""))
 
             confirmed = recorder.wait_for_state_change(previous, 1)
@@ -147,7 +156,7 @@ class DeviceSafetyTests(unittest.TestCase):
             )
         client.executeClient.send_command.assert_not_called()
 
-    def test_p1s_start_uses_cache_gcode_command(self):
+    def test_p1s_start_uses_cache_project_command(self):
         client = Mock()
 
         start_after_confirmation(
@@ -158,8 +167,13 @@ class DeviceSafetyTests(unittest.TestCase):
         )
 
         payload = json.loads(client.executeClient.send_command.call_args.args[0])
-        self.assertEqual(payload["print"]["command"], "gcode_file")
-        self.assertEqual(payload["print"]["param"], "/sdcard/cache/remote.gcode.3mf")
+        self.assertEqual(payload["print"]["command"], "project_file")
+        self.assertEqual(payload["print"]["param"], START_GCODE)
+        self.assertEqual(
+            payload["print"]["url"],
+            "file:///sdcard/cache/remote.gcode.3mf",
+        )
+        self.assertTrue(payload["print"]["bed_levelling"])
 
 
 if __name__ == "__main__":
