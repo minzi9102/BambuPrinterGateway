@@ -62,6 +62,24 @@ class DeviceSafetyTests(unittest.TestCase):
 
         self.assertEqual(confirmed["gcode_state"], "RUNNING")
 
+    def test_command_rejection_fails_without_waiting_for_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            recorder = StatusRecorder(Path(directory, "states.jsonl"))
+            recorder.record(SimpleNamespace(gcode_state="FINISH", subtask_name="old", gcode_file=""))
+            previous = recorder.state_signature()
+            recorder.record_command(
+                {
+                    "command": "gcode_file",
+                    "sequence_id": "0",
+                    "result": "fail",
+                    "reason": "bad path",
+                    "msg": 1,
+                }
+            )
+
+            with self.assertRaisesRegex(Phase0Error, "bad path"):
+                recorder.wait_for_state_change(previous, 120)
+
     def test_unreachable_mqtt_port_is_reported_before_client_creation(self):
         connect = Mock(side_effect=TimeoutError)
         with self.assertRaisesRegex(Phase0Error, "host:8883"):
@@ -141,7 +159,7 @@ class DeviceSafetyTests(unittest.TestCase):
 
         payload = json.loads(client.executeClient.send_command.call_args.args[0])
         self.assertEqual(payload["print"]["command"], "gcode_file")
-        self.assertEqual(payload["print"]["param"], "cache/remote.gcode.3mf")
+        self.assertEqual(payload["print"]["param"], "/sdcard/cache/remote.gcode.3mf")
 
 
 if __name__ == "__main__":

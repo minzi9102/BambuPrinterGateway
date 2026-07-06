@@ -54,8 +54,11 @@ class PrinterConfig:
 class StatusRecorder:
     def __init__(self, path: Path):
         self.path = path
+        self.command_path = path.with_name(f"{path.stem}-commands.jsonl")
         self.received = threading.Event()
         self._last: dict[str, object] | None = None
+        self._last_command: tuple[object, ...] | None = None
+        self._command_failure: str | None = None
         self._lock = threading.Lock()
         self._changed = threading.Condition(self._lock)
 
@@ -75,6 +78,31 @@ class StatusRecorder:
             f"progress={state['mc_percent']} layer={state['layer_num']}/{state['total_layer_num']}"
         )
 
+    def record_command(self, values: dict[str, object]) -> None:
+        if values.get("command") not in {"gcode_file", "project_file"}:
+            return
+        fields = ("command", "sequence_id", "result", "reason", "msg", "fail_reason")
+        signature = tuple(values.get(field) for field in fields)
+        with self._changed:
+            if signature == self._last_command:
+                return
+            self._last_command = signature
+            entry = {"timestamp": now(), **{field: values.get(field) for field in fields}}
+            with self.command_path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            result = str(values.get("result") or "").lower()
+            msg = str(values.get("msg") if values.get("msg") is not None else "0")
+            if (result and result not in {"success", "ok"}) or msg != "0":
+                self._command_failure = str(
+                    values.get("reason")
+                    or values.get("fail_reason")
+                    or f"result={result or 'unknown'}, msg={msg}"
+                )
+            self._changed.notify_all()
+        print(
+            f"MQTT 命令响应：result={entry['result']} reason={entry['reason']} msg={entry['msg']}"
+        )
+
     def state_signature(self) -> object:
         with self._lock:
             return self._state_signature()
@@ -87,6 +115,8 @@ class StatusRecorder:
         deadline = time.monotonic() + timeout
         with self._changed:
             while self._state_signature() == previous:
+                if self._command_failure:
+                    raise Phase0Error(f"打印机拒绝启动命令：{self._command_failure}")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise Phase0Error(
@@ -283,7 +313,7 @@ def start_after_confirmation(
                 "print": {
                     "sequence_id": "0",
                     "command": "gcode_file",
-                    "param": remote_path,
+                    "param": f"/sdcard/{remote_path}",
                 }
             }
         )
@@ -361,10 +391,16 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
 
     print(f"验证通过：{gcode_entry}")
     print(f"状态证据：{log_path}")
+    print(f"命令响应证据：{recorder.command_path}")
     try:
         client = BambuClient(config.host, config.access_code, config.serial)
         enable_confirmed_commands(client, args.command_timeout)
-        client.start_watch_client(recorder.record, connected.set)
+
+        def record_status(status: object) -> None:
+            recorder.record(status)
+            recorder.record_command(client.watchClient.values)
+
+        client.start_watch_client(record_status, connected.set)
         watch_started = True
         if not connected.wait(args.connect_timeout):
             raise Phase0Error("MQTT 连接超时")
