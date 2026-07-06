@@ -13,6 +13,7 @@ uv run bambu-phase0 .\tiny.gcode.3mf
 命令会校验文件、监听 MQTT、上传并确认远程文件。只有操作员输入命令显示的完整
 `START phase0_....gcode.3mf` 后才会启动打印。
 
+程序会等待 MQTT 确认任务状态发生变化；默认 120 秒无变化即失败，且不会自动重试。
 打印机物理开始和完成时分别输入 `STARTED`、`COMPLETED`。脱敏状态记录及
 `phase0-results.md` 保存在 `phase0-artifacts/`，该目录不会提交到 Git。
 

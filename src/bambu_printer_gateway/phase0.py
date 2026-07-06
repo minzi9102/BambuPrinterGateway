@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -56,21 +57,49 @@ class StatusRecorder:
         self.received = threading.Event()
         self._last: dict[str, object] | None = None
         self._lock = threading.Lock()
+        self._changed = threading.Condition(self._lock)
 
     def record(self, status: object) -> None:
         state = {field: getattr(status, field, None) for field in STATUS_FIELDS}
-        with self._lock:
+        with self._changed:
             if state == self._last:
                 return
             self._last = state
             entry = {"timestamp": now(), **state}
             with self.path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            self._changed.notify_all()
         self.received.set()
         print(
             f"[{entry['timestamp']}] state={state['gcode_state']} "
             f"progress={state['mc_percent']} layer={state['layer_num']}/{state['total_layer_num']}"
         )
+
+    def task_signature(self) -> tuple[object, object, object] | None:
+        with self._lock:
+            return self._task_signature()
+
+    def wait_for_task_change(
+        self,
+        previous: tuple[object, object, object] | None,
+        timeout: int,
+    ) -> dict[str, object]:
+        deadline = time.monotonic() + timeout
+        with self._changed:
+            while self._task_signature() == previous:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise Phase0Error(
+                        f"启动命令已发送，但 {timeout} 秒内未收到任务状态变化；"
+                        "请检查打印机，确认未启动后再重试"
+                    )
+                self._changed.wait(remaining)
+            return dict(self._last or {})
+
+    def _task_signature(self) -> tuple[object, object, object] | None:
+        if self._last is None:
+            return None
+        return tuple(self._last[field] for field in ("gcode_state", "subtask_name", "gcode_file"))
 
 
 def now() -> str:
@@ -135,6 +164,30 @@ def check_printer_port(
         raise Phase0Error(
             f"无法连接打印机 {host}:8883；请检查 PRINTER_HOST、局域网、LAN Mode 和防火墙"
         ) from error
+
+
+def publish_command(mqtt_client: object, topic: str, payload: str, timeout: int) -> None:
+    mqtt_client.loop_start()
+    try:
+        deadline = time.monotonic() + timeout
+        while not mqtt_client.is_connected():
+            if time.monotonic() >= deadline:
+                raise Phase0Error(f"MQTT 命令连接超过 {timeout} 秒")
+            time.sleep(0.05)
+        result = mqtt_client.publish(topic, payload)
+        result.wait_for_publish(timeout)
+        if not result.is_published():
+            raise Phase0Error(f"MQTT 命令发送超过 {timeout} 秒")
+    except (OSError, RuntimeError, ValueError) as error:
+        raise Phase0Error(f"MQTT 命令发送失败：{error}") from error
+    finally:
+        mqtt_client.loop_stop()
+
+
+def enable_confirmed_commands(client: BambuClient, timeout: int) -> None:
+    execute = client.executeClient
+    topic = f"device/{execute.serial}/request"
+    execute.send_command = lambda payload: publish_command(execute.client, topic, payload, timeout)
 
 
 def upload_file(
@@ -269,6 +322,7 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
     print(f"状态证据：{log_path}")
     try:
         client = BambuClient(config.host, config.access_code, config.serial)
+        enable_confirmed_commands(client, args.command_timeout)
         client.start_watch_client(recorder.record, connected.set)
         watch_started = True
         if not connected.wait(args.connect_timeout):
@@ -278,7 +332,13 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
             raise Phase0Error("MQTT 已连接，但未收到打印机状态")
         upload_and_verify(client, curl, config, local_path, remote_name, args.upload_timeout)
         print(f"上传并确认成功：{remote_name}")
+        previous_task = recorder.task_signature()
         start_after_confirmation(client, remote_name, input_fn)
+        confirmed = recorder.wait_for_task_change(previous_task, args.start_timeout)
+        print(
+            f"MQTT 已确认任务状态变化：state={confirmed['gcode_state']} "
+            f"task={confirmed['subtask_name']}"
+        )
         started_at = wait_for_operator("STARTED", input_fn)
         completed_at = wait_for_operator("COMPLETED", input_fn)
         write_report(
@@ -303,6 +363,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("file", help="小型、已切片的 .gcode.3mf 文件")
     parser.add_argument("--artifacts-dir", default="phase0-artifacts")
     parser.add_argument("--connect-timeout", type=int, default=30)
+    parser.add_argument("--command-timeout", type=int, default=10)
+    parser.add_argument("--start-timeout", type=int, default=120)
     parser.add_argument("--upload-timeout", type=int, default=600)
     return parser
 

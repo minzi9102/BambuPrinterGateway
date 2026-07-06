@@ -3,13 +3,16 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from bambu_printer_gateway.phase0 import (
     Phase0Error,
     PrinterConfig,
     START_GCODE,
+    StatusRecorder,
     check_printer_port,
+    publish_command,
     start_after_confirmation,
     upload_and_verify,
     upload_file,
@@ -46,6 +49,17 @@ class FileValidationTests(unittest.TestCase):
 
 
 class DeviceSafetyTests(unittest.TestCase):
+    def test_start_confirmation_requires_task_state_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            recorder = StatusRecorder(Path(directory, "states.jsonl"))
+            recorder.record(SimpleNamespace(gcode_state="FINISH", subtask_name="old", gcode_file=""))
+            previous = recorder.task_signature()
+            recorder.record(SimpleNamespace(gcode_state="RUNNING", subtask_name="new", gcode_file=""))
+
+            confirmed = recorder.wait_for_task_change(previous, 1)
+
+        self.assertEqual(confirmed["gcode_state"], "RUNNING")
+
     def test_unreachable_mqtt_port_is_reported_before_client_creation(self):
         connect = Mock(side_effect=TimeoutError)
         with self.assertRaisesRegex(Phase0Error, "host:8883"):
@@ -62,6 +76,17 @@ class DeviceSafetyTests(unittest.TestCase):
             upload_file("curl", PrinterConfig("host", "secret", "serial"), Path("x"), "r", 10, run)
         self.assertNotIn("secret", str(raised.exception))
         self.assertIn("***", str(raised.exception))
+
+    def test_mqtt_publish_waits_for_delivery(self):
+        mqtt_client = Mock()
+        mqtt_client.is_connected.return_value = True
+        result = mqtt_client.publish.return_value
+        result.is_published.return_value = True
+
+        publish_command(mqtt_client, "device/serial/request", "payload", 1)
+
+        result.wait_for_publish.assert_called_once_with(1)
+        mqtt_client.loop_stop.assert_called_once()
 
     @patch("bambu_printer_gateway.phase0.upload_file")
     def test_missing_remote_file_stops_flow(self, mocked_upload):
