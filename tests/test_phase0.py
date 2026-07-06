@@ -13,6 +13,7 @@ from bambu_printer_gateway.phase0 import (
     START_GCODE,
     StatusRecorder,
     check_printer_port,
+    list_remote_files,
     publish_command,
     start_after_confirmation,
     upload_and_verify,
@@ -89,21 +90,33 @@ class DeviceSafetyTests(unittest.TestCase):
         result.wait_for_publish.assert_called_once_with(1)
         mqtt_client.loop_stop.assert_called_once()
 
+    def test_file_listing_decodes_utf8_independently_of_windows_locale(self):
+        run = Mock(
+            return_value=subprocess.CompletedProcess(
+                [],
+                0,
+                "旧文件.gcode.3mf\nremote.gcode.3mf\n".encode(),
+                b"",
+            )
+        )
+
+        files = list_remote_files("curl", PrinterConfig("host", "secret", "serial"), "cache", 10, run)
+
+        self.assertIn("remote.gcode.3mf", files)
+
+    @patch("bambu_printer_gateway.phase0.list_remote_files", return_value=[])
     @patch("bambu_printer_gateway.phase0.upload_file")
-    def test_missing_remote_file_stops_flow(self, mocked_upload):
-        client = Mock()
-        client.get_files.return_value = []
+    def test_missing_remote_file_stops_flow(self, mocked_upload, mocked_list):
         with self.assertRaisesRegex(Phase0Error, "未在打印机中找到"):
             upload_and_verify(
-                client,
                 "curl",
                 PrinterConfig("host", "secret", "serial"),
                 Path("x"),
                 "cache/remote.gcode.3mf",
                 10,
             )
-        client.executeClient.send_command.assert_not_called()
         mocked_upload.assert_called_once()
+        mocked_list.assert_called_once()
 
     def test_operator_cancellation_never_starts_print(self):
         client = Mock()

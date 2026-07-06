@@ -224,8 +224,38 @@ def upload_file(
         raise Phase0Error(f"FTPS 上传失败（curl {result.returncode}）：{detail or '无错误详情'}")
 
 
+def list_remote_files(
+    curl: str,
+    config: PrinterConfig,
+    remote_dir: str,
+    timeout: int,
+    run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
+) -> list[str]:
+    command = [
+        curl,
+        "--fail",
+        "--silent",
+        "--show-error",
+        "--ftp-pasv",
+        "--insecure",
+        "--list-only",
+        f"ftps://{config.host}/{remote_dir.strip('/')}/",
+        "--user",
+        f"bblp:{config.access_code}",
+    ]
+    try:
+        result = run(command, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise Phase0Error(f"FTPS 文件列表超过 {timeout} 秒") from error
+    except OSError as error:
+        raise Phase0Error("无法启动 curl 获取文件列表") from error
+    if result.returncode:
+        detail = redact(result.stderr.decode("utf-8", errors="replace").strip(), config.access_code)
+        raise Phase0Error(f"FTPS 文件列表失败（curl {result.returncode}）：{detail or '无错误详情'}")
+    return result.stdout.decode("utf-8", errors="replace").splitlines()
+
+
 def upload_and_verify(
-    client: BambuClient,
     curl: str,
     config: PrinterConfig,
     local_path: Path,
@@ -234,7 +264,7 @@ def upload_and_verify(
 ) -> None:
     upload_file(curl, config, local_path, remote_path, timeout)
     remote = Path(remote_path)
-    if remote.name not in client.get_files(f"/{remote.parent.as_posix()}/", ".3mf"):
+    if remote.name not in list_remote_files(curl, config, remote.parent.as_posix(), timeout):
         raise Phase0Error(f"上传后未在打印机中找到 {remote_path}")
 
 
@@ -341,7 +371,7 @@ def run_gate(args: argparse.Namespace, input_fn: Callable[[str], str] = input) -
         client.dump_info()
         if not recorder.received.wait(args.connect_timeout):
             raise Phase0Error("MQTT 已连接，但未收到打印机状态")
-        upload_and_verify(client, curl, config, local_path, remote_path, args.upload_timeout)
+        upload_and_verify(curl, config, local_path, remote_path, args.upload_timeout)
         print(f"上传并确认成功：{remote_path}")
         previous_state = recorder.state_signature()
         start_after_confirmation(client, remote_name, remote_path, input_fn)
