@@ -1,6 +1,7 @@
 # Bambu Printer Gateway
 
 当前只实现 `Plan.md` 的 Iteration 0：真实打印链路技术 Gate。
+Iteration 1 增加了长期运行的打印机状态监控命令，但仍不包含 Web、Queue 或数据库。
 
 ```powershell
 uv sync
@@ -18,3 +19,18 @@ uv run bambu-phase0 .\tiny.gcode.3mf
 `phase0-results.md` 保存在 `phase0-artifacts/`，该目录不会提交到 Git。
 
 运行前必须确认打印板已清理。中断程序不会停止已经开始的打印；测试结束后请从打印机界面删除测试文件。
+
+## Iteration 1：Gateway 监控
+
+```powershell
+uv run bambu-gateway-monitor
+```
+
+启动后会连接打印机、调用 `dump_info()`，并持续输出状态、进度、剩余时间、层数、
+温度、风扇、WiFi、AMS 原始状态和错误原始字段。完整状态写入：
+
+```text
+phase0-artifacts/gateway-monitor.jsonl
+```
+
+打印机需要开启“仅局域网模式”和“开发者模式”。按 `Ctrl+C` 会停止监听并断开连接。

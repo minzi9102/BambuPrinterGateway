@@ -217,6 +217,34 @@ def enable_confirmed_commands(client: BambuClient, timeout: int) -> None:
     execute.send_command = lambda payload: publish_command(execute.client, topic, payload, timeout)
 
 
+def build_project_file_payload(remote_name: str, remote_path: str) -> str:
+    return json.dumps(
+        {
+            "print": {
+                "sequence_id": "0",
+                "command": "project_file",
+                "param": START_GCODE,
+                "project_id": "0",
+                "profile_id": "0",
+                "task_id": "0",
+                "subtask_id": "0",
+                "subtask_name": remote_name.removesuffix(".3mf"),
+                "file": "",
+                "url": f"file:///sdcard/{remote_path}",
+                "md5": "",
+                "timelapse": False,
+                "bed_type": "auto",
+                "bed_levelling": True,
+                "flow_cali": False,
+                "vibration_cali": True,
+                "layer_inspect": True,
+                "ams_mapping": [],
+                "use_ams": False,
+            }
+        }
+    )
+
+
 def upload_file(
     curl: str,
     config: PrinterConfig,
@@ -306,33 +334,7 @@ def start_after_confirmation(
     expected = f"START {remote_name}"
     if input_fn(f"确认打印板已清理，输入“{expected}”启动打印：").strip() != expected:
         raise Phase0Error("操作员取消启动；文件已上传，但未发送打印命令")
-    client.executeClient.send_command(
-        json.dumps(
-            {
-                "print": {
-                    "sequence_id": "0",
-                    "command": "project_file",
-                    "param": START_GCODE,
-                    "project_id": "0",
-                    "profile_id": "0",
-                    "task_id": "0",
-                    "subtask_id": "0",
-                    "subtask_name": remote_name.removesuffix(".3mf"),
-                    "file": "",
-                    "url": f"file:///sdcard/{remote_path}",
-                    "md5": "",
-                    "timelapse": False,
-                    "bed_type": "auto",
-                    "bed_levelling": True,
-                    "flow_cali": False,
-                    "vibration_cali": True,
-                    "layer_inspect": True,
-                    "ams_mapping": [],
-                    "use_ams": False,
-                }
-            }
-        )
-    )
+    client.executeClient.send_command(build_project_file_payload(remote_name, remote_path))
 
 
 def wait_for_operator(label: str, input_fn: Callable[[str], str] = input) -> str:

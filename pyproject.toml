@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 bambu-phase0 = "bambu_printer_gateway.phase0:main"
+bambu-gateway-monitor = "bambu_printer_gateway.gateway:main"
 
 [build-system]
 requires = ["hatchling"]
