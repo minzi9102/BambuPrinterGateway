@@ -21,6 +21,8 @@ class GatewayStatusTests(unittest.TestCase):
     def test_known_state_normalizes(self):
         self.assertEqual(normalize_printer_state(SimpleNamespace(gcode_state="RUNNING")), "printing")
         self.assertEqual(normalize_printer_state(SimpleNamespace(gcode_state="FINISH")), "finished")
+        self.assertEqual(normalize_printer_state(SimpleNamespace(gcode_state="PREPARE")), "starting")
+        self.assertEqual(normalize_printer_state(SimpleNamespace(gcode_state="PAUSE")), "paused")
 
     def test_unknown_state_is_preserved_in_snapshot(self):
         status = SimpleNamespace(gcode_state="MYSTERY", mc_percent=12)

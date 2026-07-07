@@ -75,6 +75,9 @@ MONITORED_FIELDS = (
 
 STATE_MAP = {
     "FINISH": "finished",
+    "IDLE": "idle",
+    "PAUSE": "paused",
+    "PREPARE": "starting",
     "RUNNING": "printing",
 }
 

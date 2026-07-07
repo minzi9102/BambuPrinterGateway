@@ -12,6 +12,7 @@ from bambu_printer_gateway.phase0 import (
     PrinterConfig,
     START_GCODE,
     StatusRecorder,
+    build_project_file_payload,
     check_printer_port,
     list_remote_files,
     publish_command,
@@ -174,6 +175,26 @@ class DeviceSafetyTests(unittest.TestCase):
             "file:///sdcard/cache/remote.gcode.3mf",
         )
         self.assertTrue(payload["print"]["bed_levelling"])
+
+    def test_project_payload_can_enable_ams(self):
+        payload = json.loads(
+            build_project_file_payload(
+                "remote.gcode.3mf",
+                "cache/remote.gcode.3mf",
+                use_ams=True,
+                ams_mapping=[0],
+            )
+        )
+
+        self.assertTrue(payload["print"]["use_ams"])
+        self.assertEqual(payload["print"]["ams_mapping"], [0])
+
+    def test_project_payload_reads_ams_environment(self):
+        with patch.dict("os.environ", {"PRINTER_USE_AMS": "true", "PRINTER_AMS_MAPPING": "[1]"}):
+            payload = json.loads(build_project_file_payload("remote.gcode.3mf", "cache/remote.gcode.3mf"))
+
+        self.assertTrue(payload["print"]["use_ams"])
+        self.assertEqual(payload["print"]["ams_mapping"], [1])
 
 
 if __name__ == "__main__":

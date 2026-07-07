@@ -34,3 +34,12 @@ phase0-artifacts/gateway-monitor.jsonl
 ```
 
 打印机需要开启“仅局域网模式”和“开发者模式”。按 `Ctrl+C` 会停止监听并断开连接。
+
+如果测试文件需要从 AMS 送料，启动前设置：
+
+```powershell
+$env:PRINTER_USE_AMS = "true"
+$env:PRINTER_AMS_MAPPING = "[0]"
+```
+
+`PRINTER_AMS_MAPPING` 是传给打印机的原始 JSON 数组；不同 AMS 槽位请按实际切片/设备映射调整。

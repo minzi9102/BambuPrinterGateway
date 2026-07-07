@@ -217,7 +217,41 @@ def enable_confirmed_commands(client: BambuClient, timeout: int) -> None:
     execute.send_command = lambda payload: publish_command(execute.client, topic, payload, timeout)
 
 
-def build_project_file_payload(remote_name: str, remote_path: str) -> str:
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return default
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise Phase0Error(f"{name} 必须是 true/false")
+
+
+def env_json_list(name: str) -> list[object]:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise Phase0Error(f"{name} 必须是 JSON 数组") from error
+    if not isinstance(parsed, list):
+        raise Phase0Error(f"{name} 必须是 JSON 数组")
+    return parsed
+
+
+def build_project_file_payload(
+    remote_name: str,
+    remote_path: str,
+    *,
+    use_ams: bool | None = None,
+    ams_mapping: list[object] | None = None,
+) -> str:
+    if use_ams is None:
+        use_ams = env_flag("PRINTER_USE_AMS")
+    if ams_mapping is None:
+        ams_mapping = env_json_list("PRINTER_AMS_MAPPING")
     return json.dumps(
         {
             "print": {
@@ -238,8 +272,8 @@ def build_project_file_payload(remote_name: str, remote_path: str) -> str:
                 "flow_cali": False,
                 "vibration_cali": True,
                 "layer_inspect": True,
-                "ams_mapping": [],
-                "use_ams": False,
+                "ams_mapping": ams_mapping,
+                "use_ams": use_ams,
             }
         }
     )
