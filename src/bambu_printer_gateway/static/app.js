@@ -15,7 +15,7 @@ async function refreshQueue() {
   queueList.replaceChildren(
     ...data.jobs.map((job) => {
       const item = document.createElement("li");
-      item.textContent = `${job.position}. ${job.display_name} - ${job.project_name}`;
+      item.textContent = `${job.display_name} - ${job.project_name}`;
       return item;
     }),
   );
@@ -50,3 +50,8 @@ function connectSocket() {
 refreshStatus();
 refreshQueue();
 connectSocket();
+setInterval(refreshQueue, 5000);
+window.addEventListener("focus", refreshQueue);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshQueue();
+});
