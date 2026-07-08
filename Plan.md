@@ -1421,38 +1421,203 @@ Layer: 102 / 320
 
 ## Iteration 2：Queue 和 SQLite
 
-开发：
+目标：
+
+```text
+用 SQLite 持久化 Job，并提供最小 FIFO Queue 能力。
+本阶段只做后端队列核心，不接 Web API、不上传文件、不连接打印机。
+```
+
+开发文件：
+
+```text
+src/bambu_printer_gateway/database.py
+src/bambu_printer_gateway/jobs.py
+tests/test_queue.py
+```
+
+依赖选择：
+
+```text
+使用 Python 标准库 sqlite3
+暂不引入 SQLAlchemy
+暂不做 migration 框架
+```
+
+原因：
+
+```text
+当前项目还没有 FastAPI / ORM 基础。
+Iteration 2 只需要一个 jobs 表和少量查询，sqlite3 足够完成验收。
+以后 Web 层稳定后，如果确实需要 ORM，再升级。
+```
+
+数据库初始化：
 
 ```text
 database.py
-Job model
-QueueService
-JobStateService
+
+open_database(path)
+    ↓
+创建父目录
+    ↓
+sqlite3.connect(path)
+    ↓
+设置 row_factory = sqlite3.Row
+    ↓
+执行 init_schema(conn)
 ```
 
-实现：
+Schema：
+
+```sql
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    project_name TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    stored_filename TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    remote_filename TEXT NOT NULL,
+    status TEXT NOT NULL,
+    queue_sequence INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_queue
+ON jobs(status, queue_sequence);
+```
+
+Job model：
 
 ```text
-create_job
-get_queue
-get_next_job
-cancel_job
-change_job_state
+jobs.py
+
+JobStatus
+    QUEUED
+    UPLOADING
+    STARTING
+    PRINTING
+    COMPLETED
+    FAILED
+    CANCELLED
+
+Job dataclass
+    字段与 jobs 表一致
+
+row_to_job(row)
 ```
 
-编写测试：
+QueueService：
+
+```text
+create_job(display_name, project_name, original_filename, stored_filename, stored_path)
+    ↓
+生成 uuid4 id
+    ↓
+remote_filename = queue_<id前8位>.gcode.3mf
+    ↓
+queue_sequence = COALESCE(MAX(queue_sequence), 0) + 1
+    ↓
+status = QUEUED
+    ↓
+写入 SQLite
+    ↓
+返回 Job
+
+get_queue()
+    ↓
+只返回 status = QUEUED
+    ↓
+按 queue_sequence ASC
+
+get_next_job()
+    ↓
+返回最早的 QUEUED Job
+    ↓
+空队列返回 None
+
+cancel_job(job_id)
+    ↓
+只允许取消 QUEUED
+    ↓
+改为 CANCELLED
+    ↓
+返回更新后的 Job
+```
+
+JobStateService：
+
+```text
+change_job_state(job_id, new_status, error_message=None)
+    ↓
+读取当前 Job
+    ↓
+校验状态存在
+    ↓
+COMPLETED 设置 finished_at
+    ↓
+FAILED 设置 finished_at 和 error_message
+    ↓
+PRINTING 设置 started_at
+    ↓
+写回 SQLite
+```
+
+状态规则：
+
+```text
+允许：
+
+QUEUED    → CANCELLED
+QUEUED    → UPLOADING
+UPLOADING → STARTING
+UPLOADING → FAILED
+STARTING  → PRINTING
+STARTING  → FAILED
+PRINTING  → COMPLETED
+PRINTING  → FAILED
+
+拒绝：
+
+COMPLETED → 任何状态
+FAILED    → 任何状态
+CANCELLED → 任何状态
+```
+
+错误处理：
+
+```text
+找不到 job_id：抛出 QueueError
+非法状态流转：抛出 QueueError
+cancel_job 非 QUEUED：抛出 QueueError
+```
+
+测试：
 
 ```text
 3 个任务 FIFO 顺序正确
 取消中间任务后顺序正确
 COMPLETED 不会重新进入 Queue
 FAILED 不会进入 Queue
+服务重启以后队列仍存在
+非法状态流转会失败
+取消非 QUEUED 任务会失败
 ```
 
 验收：
 
 ```text
-服务重启以后队列仍存在
+uv run python -m unittest tests.test_queue
+
+测试中使用 tempfile 创建真实 SQLite 文件：
+    第一次连接创建 3 个任务
+    关闭连接
+    第二次连接同一个 db path
+    get_queue() 仍能读到未完成队列
 ```
 
 ---
