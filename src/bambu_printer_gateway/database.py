@@ -37,7 +37,7 @@ def open_database(path: str | Path) -> sqlite3.Connection:
     db_path = Path(path)
     if str(db_path) != ":memory:":
         db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     init_schema(conn)
     return conn

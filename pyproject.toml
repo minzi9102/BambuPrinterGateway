@@ -5,12 +5,17 @@ description = "Bambu printer gateway technical validation"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "bambu-connect @ git+https://github.com/mattcar15/bambu-connect.git@56749e16c8e4dffeba878a139db1cefa8858abcc",
+    "fastapi>=0.139,<1",
+    "httpx>=0.28,<1",
     "paho-mqtt>=2,<3",
+    "python-multipart>=0.0.32,<1",
+    "uvicorn>=0.51,<1",
 ]
 
 [project.scripts]
 bambu-phase0 = "bambu_printer_gateway.phase0:main"
 bambu-gateway-monitor = "bambu_printer_gateway.gateway:main"
+bambu-queue-server = "bambu_printer_gateway.web:main"
 
 [build-system]
 requires = ["hatchling"]

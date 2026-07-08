@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bambu Printer Queue</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <section class="status">
+        <h1>3D Printer Queue</h1>
+        <dl>
+          <div>
+            <dt>Status</dt>
+            <dd id="printer-state">unknown</dd>
+          </div>
+          <div>
+            <dt>Connected</dt>
+            <dd id="printer-connected">false</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Queue</h2>
+        <ol id="queue"></ol>
+      </section>
+
+      <section>
+        <h2>Submit Print Job</h2>
+        <form id="job-form">
+          <label>
+            Name
+            <input name="display_name" required>
+          </label>
+          <label>
+            Project Name
+            <input name="project_name" required>
+          </label>
+          <label>
+            Print File
+            <input name="file" type="file" accept=".3mf,.gcode.3mf" required>
+          </label>
+          <button type="submit">Join Queue</button>
+        </form>
+        <p id="message" role="status"></p>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
