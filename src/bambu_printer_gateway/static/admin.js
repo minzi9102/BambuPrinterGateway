@@ -23,6 +23,10 @@ function ensureAuth() {
 function renderAmsSlots(trays) {
   const bySlot = new Map(trays.map((tray) => [tray.slot, tray]));
   const options = [0, 1, 2, 3].map((slot) => bySlot.get(slot) || { slot, label: `AMS Slot ${slot + 1}` });
+  amsSlots.style.display = "grid";
+  amsSlots.style.gridTemplateColumns = "repeat(4, minmax(0, 1fr))";
+  amsSlots.style.gap = "10px";
+  amsSlots.style.marginBottom = "16px";
   amsSlots.replaceChildren(
     ...options.map((tray) => {
       const card = document.createElement("button");
@@ -34,12 +38,27 @@ function renderAmsSlots(trays) {
       card.dataset.slot = String(tray.slot);
       card.setAttribute("role", "radio");
       card.setAttribute("aria-checked", String(tray.slot === selectedAmsSlot));
+      card.style.display = "flex";
+      card.style.gap = "10px";
+      card.style.alignItems = "center";
+      card.style.minHeight = "78px";
+      card.style.padding = "10px";
+      card.style.background = tray.slot === selectedAmsSlot ? "#eff6ff" : "#fff";
+      card.style.color = "#1f2937";
+      card.style.border = `2px solid ${tray.slot === selectedAmsSlot ? "#2563eb" : "#cbd5e1"}`;
+      card.style.textAlign = "left";
       const swatch = document.createElement("span");
       const copy = document.createElement("span");
       const title = document.createElement("strong");
       const description = document.createElement("span");
       swatch.className = "ams-color";
       swatch.style.background = cssColor;
+      swatch.style.display = "inline-block";
+      swatch.style.flex = "0 0 28px";
+      swatch.style.width = "28px";
+      swatch.style.height = "28px";
+      swatch.style.borderRadius = "999px";
+      swatch.style.border = "1px solid rgb(15 23 42 / 22%)";
       copy.className = "ams-slot-copy";
       title.textContent = `AMS Slot ${tray.slot + 1}`;
       description.textContent = details;
