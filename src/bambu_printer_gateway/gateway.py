@@ -110,6 +110,11 @@ def status_snapshot(status: object) -> dict[str, Any]:
     }
 
 
+def has_ams_trays(snapshot: dict[str, Any]) -> bool:
+    ams_units = ((snapshot.get("ams") or {}).get("ams") or [])
+    return bool(ams_units and (ams_units[0].get("tray") or []))
+
+
 class BambuAdapter:
     def __init__(
         self,
@@ -208,6 +213,9 @@ class PrinterService:
 
     def on_status(self, status: object) -> None:
         snapshot = status_snapshot(status)
+        if not has_ams_trays(snapshot) and self.raw_status and has_ams_trays(self.raw_status):
+            for field in ("ams", "ams_status", "ams_rfid_status", "vt_tray"):
+                snapshot[field] = self.raw_status.get(field)
         signature = json.dumps(
             {key: value for key, value in snapshot.items() if key != "timestamp"},
             ensure_ascii=False,

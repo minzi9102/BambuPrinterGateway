@@ -86,6 +86,17 @@ class PrinterServiceTests(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0])["mc_percent"], 1)
 
+    def test_status_keeps_last_ams_trays_when_next_snapshot_omits_ams(self):
+        service = PrinterService(Mock(), output=lambda _: None)
+        ams = {"ams": [{"tray": [{"id": "0", "tray_type": "PLA"}]}]}
+
+        service.on_status(SimpleNamespace(gcode_state="IDLE", mc_percent=0, ams=ams, ams_status=0))
+        service.on_status(SimpleNamespace(gcode_state="RUNNING", mc_percent=1))
+
+        self.assertEqual(service.normalized_state, "printing")
+        self.assertEqual(service.raw_status["ams"], ams)
+        self.assertEqual(service.raw_status["ams_status"], 0)
+
     def test_stop_disconnects_adapter(self):
         adapter = Mock()
         service = PrinterService(adapter)
