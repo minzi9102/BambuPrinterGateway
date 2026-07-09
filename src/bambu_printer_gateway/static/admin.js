@@ -4,7 +4,20 @@ const nextJob = document.querySelector("#next-job");
 const message = document.querySelector("#message");
 const button = document.querySelector("#start-next");
 const amsSlot = document.querySelector("#ams-slot");
+const debugToggle = document.querySelector("#debug-toggle");
+const debugPanel = document.querySelector("#debug-panel");
+const debugRefresh = document.querySelector("#debug-refresh");
+const debugUpdated = document.querySelector("#debug-updated");
+const debugOutput = document.querySelector("#debug-output");
 let authHeader = null;
+
+function ensureAuth() {
+  if (!authHeader) {
+    const username = prompt("Admin username");
+    const password = prompt("Admin password");
+    authHeader = `Basic ${btoa(`${username}:${password}`)}`;
+  }
+}
 
 function renderAmsSlots(trays) {
   const selected = amsSlot.value || "0";
@@ -39,11 +52,7 @@ async function refresh() {
 
 button.addEventListener("click", async () => {
   message.textContent = "Starting...";
-  if (!authHeader) {
-    const username = prompt("Admin username");
-    const password = prompt("Admin password");
-    authHeader = `Basic ${btoa(`${username}:${password}`)}`;
-  }
+  ensureAuth();
   const response = await fetch("/api/admin/start-next", {
     method: "POST",
     headers: { Authorization: authHeader, "Content-Type": "application/json" },
@@ -59,6 +68,31 @@ button.addEventListener("click", async () => {
   const error = await response.json();
   message.textContent = error.detail || "Start failed.";
 });
+
+async function refreshDebug() {
+  ensureAuth();
+  debugOutput.textContent = "Loading...";
+  const [statusResponse, queueResponse, debugResponse] = await Promise.all([
+    fetch("/api/status"),
+    fetch("/api/queue"),
+    fetch("/api/admin/debug", { headers: { Authorization: authHeader } }),
+  ]);
+  if (debugResponse.status === 401) authHeader = null;
+  const payload = {
+    status: await statusResponse.json(),
+    queue: await queueResponse.json(),
+    debug: await debugResponse.json(),
+  };
+  debugUpdated.textContent = new Date().toLocaleString();
+  debugOutput.textContent = JSON.stringify(payload, null, 2);
+}
+
+debugToggle.addEventListener("click", async () => {
+  debugPanel.hidden = !debugPanel.hidden;
+  if (!debugPanel.hidden) await refreshDebug();
+});
+
+debugRefresh.addEventListener("click", refreshDebug);
 
 function connectSocket() {
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);

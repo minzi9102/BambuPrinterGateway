@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -121,16 +122,21 @@ def ams_slot_from_body(body: dict[str, Any] | None) -> int:
     return slot
 
 
+def current_task(raw_status: dict[str, Any]) -> Any:
+    return raw_status.get("subtask_name") or raw_status.get("gcode_file")
+
+
 def status_response(printer_service: object | None, queue: QueueService) -> dict[str, Any]:
     if not printer_service:
-        return {"printer": {"connected": False, "state": "unknown", "ams_trays": []}}
+        return {"printer": {"connected": False, "state": "unknown", "raw_state": None, "ams_trays": []}}
     raw_status = getattr(printer_service, "raw_status", None) or {}
     printer = {
         "connected": bool(getattr(printer_service, "connected", False)),
         "state": getattr(printer_service, "normalized_state", "unknown"),
+        "raw_state": raw_status.get("gcode_state"),
         "progress": raw_status.get("mc_percent"),
         "remaining_minutes": raw_status.get("mc_remaining_time"),
-        "current_task": raw_status.get("subtask_name") or raw_status.get("gcode_file"),
+        "current_task": current_task(raw_status),
         "layer": raw_status.get("layer_num"),
         "total_layers": raw_status.get("total_layer_num"),
         "current_job": None,
@@ -140,6 +146,38 @@ def status_response(printer_service: object | None, queue: QueueService) -> dict
     if active and active.status == JobStatus.PRINTING:
         printer["current_job"] = job_response(active)
     return {"printer": printer}
+
+
+def debug_response(printer_service: object | None, queue: QueueService) -> dict[str, Any]:
+    raw_status = getattr(printer_service, "raw_status", None) or {}
+    ams_units = ((raw_status.get("ams") or {}).get("ams") or [])
+    trays = (ams_units[0].get("tray") or []) if ams_units else []
+    return {
+        "runtime": {
+            "python": sys.executable,
+            "cwd": str(Path.cwd()),
+            "web_module_file": __file__,
+            "gateway_module_file": sys.modules[BambuAdapter.__module__].__file__,
+        },
+        "printer": {
+            "connected": bool(getattr(printer_service, "connected", False)) if printer_service else False,
+            "normalized_state": getattr(printer_service, "normalized_state", "unknown") if printer_service else "unknown",
+            "last_seen_at": getattr(printer_service, "last_seen_at", None) if printer_service else None,
+            "raw_gcode_state": raw_status.get("gcode_state"),
+            "print_error": raw_status.get("print_error"),
+            "hms": raw_status.get("hms"),
+            "current_task": current_task(raw_status),
+            "progress": raw_status.get("mc_percent"),
+        },
+        "ams": {
+            "ams_status": raw_status.get("ams_status"),
+            "ams_rfid_status": raw_status.get("ams_rfid_status"),
+            "ams_present": bool(ams_units),
+            "ams_tray_count": len(trays),
+            "ams_trays": ams_tray_response(raw_status),
+        },
+        "queue": queue_response(queue),
+    }
 
 
 async def wait_for_printing(printer_service: object, timeout: int) -> bool:
@@ -246,6 +284,10 @@ def create_app(
     @app.get("/api/status")
     def get_status():
         return status_response(printer_service, queue)
+
+    @app.get("/api/admin/debug")
+    def get_admin_debug(_: None = Depends(require_admin)):
+        return debug_response(printer_service, queue)
 
     @app.get("/api/queue")
     def get_queue():

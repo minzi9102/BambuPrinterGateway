@@ -184,6 +184,7 @@ class AdminStartTests(unittest.TestCase):
     def test_status_includes_ams_trays(self):
         printer = FakePrinter()
         printer.raw_status = {
+            "gcode_state": "RUNNING",
             "ams": {
                 "ams": [
                     {
@@ -203,10 +204,43 @@ class AdminStartTests(unittest.TestCase):
         }
         adapter = FakeAdapter(printer)
         with self.make_client(printer, adapter) as (client, _):
-            tray = client.get("/api/status").json()["printer"]["ams_trays"][0]
+            printer_status = client.get("/api/status").json()["printer"]
+            tray = printer_status["ams_trays"][0]
 
+            self.assertEqual(printer_status["raw_state"], "RUNNING")
             self.assertEqual(tray["slot"], 0)
             self.assertEqual(tray["label"], "AMS Slot 1 - PLA Lite - A18-B1 - 83%")
+
+    def test_admin_debug_requires_auth(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.assertEqual(client.get("/api/admin/debug").status_code, 401)
+
+    def test_admin_debug_returns_runtime_and_printer_fields(self):
+        printer = FakePrinter(state="unknown")
+        printer.last_seen_at = "2026-07-09T04:00:00+00:00"
+        printer.raw_status = {
+            "gcode_state": "SLICING",
+            "print_error": 123,
+            "hms": [{"code": 1}],
+            "subtask_name": "queue_demo.gcode",
+            "mc_percent": 7,
+            "ams_status": 0,
+            "ams_rfid_status": 0,
+            "ams": {"ams": [{"tray": [{"id": "1", "tray_type": "PLA", "remain": 50}]}]},
+        }
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            debug = client.get("/api/admin/debug", auth=self.auth()).json()
+
+            self.assertIn("python", debug["runtime"])
+            self.assertIn("web_module_file", debug["runtime"])
+            self.assertEqual(debug["printer"]["raw_gcode_state"], "SLICING")
+            self.assertEqual(debug["printer"]["current_task"], "queue_demo.gcode")
+            self.assertTrue(debug["ams"]["ams_present"])
+            self.assertEqual(debug["ams"]["ams_tray_count"], 1)
+            self.assertEqual(debug["ams"]["ams_trays"][0]["slot"], 1)
 
     def test_invalid_ams_slot_returns_400_and_keeps_queue(self):
         printer = FakePrinter()

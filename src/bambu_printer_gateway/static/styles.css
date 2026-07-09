@@ -94,3 +94,49 @@ button {
 #message {
   min-height: 24px;
 }
+
+.debug-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: auto;
+  padding: 0 16px;
+}
+
+.debug-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 72px;
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(560px, calc(100vh - 96px));
+  padding: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(15 23 42 / 18%);
+  overflow: auto;
+}
+
+.debug-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#debug-refresh {
+  width: auto;
+  padding: 0 12px;
+}
+
+#debug-updated {
+  margin: 10px 0;
+  color: #667085;
+}
+
+#debug-output {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+}

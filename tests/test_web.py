@@ -84,7 +84,10 @@ class WebTests(unittest.TestCase):
             response = client.get("/api/status")
 
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json(), {"printer": {"connected": False, "state": "unknown", "ams_trays": []}})
+            self.assertEqual(
+                response.json(),
+                {"printer": {"connected": False, "state": "unknown", "raw_state": None, "ams_trays": []}},
+            )
 
 
 if __name__ == "__main__":
