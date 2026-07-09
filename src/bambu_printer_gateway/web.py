@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
+import sqlite3
 import sys
 import uuid
 from contextlib import asynccontextmanager
@@ -19,12 +20,13 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import open_database
 from .gateway import BambuAdapter, PrinterService
-from .jobs import Job, JobStateService, JobStatus, QueueService
+from .jobs import Job, JobStateService, JobStatus, QueueService, now
 from .phase0 import Phase0Error, PrinterConfig, validate_print_file
 
 CHUNK_SIZE = 1024 * 1024
 START_READY_STATES = {"idle", "finished", "failed"}
 COMPLETED_PRINTER_STATES = {"idle", "finished"}
+STARTUP_FAILURE_MESSAGE = "Server restarted during job startup"
 security = HTTPBasic()
 
 
@@ -126,6 +128,24 @@ def ams_slot_from_body(body: dict[str, Any] | None) -> int:
 
 def current_task(raw_status: dict[str, Any]) -> Any:
     return raw_status.get("subtask_name") or raw_status.get("gcode_file")
+
+
+def fail_interrupted_startup_jobs(conn: sqlite3.Connection) -> None:
+    with conn:
+        conn.execute(
+            """
+            UPDATE jobs
+            SET status = ?, finished_at = COALESCE(finished_at, ?), error_message = ?
+            WHERE status IN (?, ?)
+            """,
+            (
+                JobStatus.FAILED.value,
+                now(),
+                STARTUP_FAILURE_MESSAGE,
+                JobStatus.UPLOADING.value,
+                JobStatus.STARTING.value,
+            ),
+        )
 
 
 def status_response(printer_service: object | None, queue: QueueService) -> dict[str, Any]:
@@ -266,6 +286,7 @@ def create_app(
     username = admin_username or os.environ.get("ADMIN_USERNAME", "admin")
     password = admin_password or os.environ.get("ADMIN_PASSWORD", "CHANGE_ME")
     conn = open_database(db_path)
+    fail_interrupted_startup_jobs(conn)
     queue = QueueService(conn)
     states = JobStateService(conn)
     hub = RealtimeHub()
@@ -301,6 +322,10 @@ def create_app(
             conn.close()
 
     app = FastAPI(lifespan=lifespan)
+
+    @app.exception_handler(sqlite3.Error)
+    async def database_error_handler(_: Any, __: sqlite3.Error):
+        return JSONResponse({"detail": "Queue database error."}, status_code=500)
 
     @app.get("/api/status")
     async def get_status():
@@ -408,4 +433,8 @@ def create_app(
 
 
 def main() -> None:
-    uvicorn.run(create_app(), host="127.0.0.1", port=8000)
+    uvicorn.run(
+        create_app(),
+        host=os.environ.get("BAMBU_QUEUE_HOST", "127.0.0.1"),
+        port=env_int("BAMBU_QUEUE_PORT", 8000),
+    )

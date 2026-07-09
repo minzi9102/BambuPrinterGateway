@@ -1,7 +1,69 @@
 # Bambu Printer Gateway
 
-当前只实现 `Plan.md` 的 Iteration 0：真实打印链路技术 Gate。
-Iteration 1 增加了长期运行的打印机状态监控命令，但仍不包含 Web、Queue 或数据库。
+当前实现了本地 Web 队列：公共页面上传 sliced `.gcode.3mf`，管理员页面手动启动队首任务。
+队列使用 SQLite 持久化，服务重启后 `QUEUED` 和 `PRINTING` 任务会保留；重启时遗留的
+`UPLOADING` / `STARTING` 任务会标记为 `FAILED`。
+
+## Web Queue
+
+复制 `.env.example` 为 `.env`，填入打印机和管理员配置后启动：
+
+```powershell
+uv sync
+uv run bambu-queue-server
+```
+
+默认地址：
+
+```text
+http://127.0.0.1:8000/
+http://127.0.0.1:8000/admin.html
+```
+
+可用环境变量：
+
+```text
+BAMBU_QUEUE_HOST=127.0.0.1
+BAMBU_QUEUE_PORT=8000
+DATABASE_PATH=data/queue.db
+UPLOAD_DIR=uploads
+MAX_UPLOAD_MB=500
+START_CONFIRM_TIMEOUT=120
+UPLOAD_TIMEOUT=600
+```
+
+公共页面在打印机离线或状态未知时会显示：
+
+```text
+PRINTER OFFLINE
+Printing is temporarily unavailable. Existing queue has been preserved.
+```
+
+## Linux systemd
+
+示例文件在：
+
+```text
+deploy/printer-queue.service.example
+```
+
+安装时把其中 `/opt/bambu-printer-gateway` 改成实际项目路径，然后：
+
+```bash
+sudo cp deploy/printer-queue.service.example /etc/systemd/system/printer-queue.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now printer-queue.service
+sudo systemctl status printer-queue.service
+journalctl -u printer-queue.service -f
+```
+
+重启服务：
+
+```bash
+sudo systemctl restart printer-queue.service
+```
+
+## Phase 0 / Gateway Monitor
 
 ```powershell
 uv sync

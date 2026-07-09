@@ -1,6 +1,7 @@
 const queueList = document.querySelector("#queue");
 const message = document.querySelector("#message");
 const form = document.querySelector("#job-form");
+const offlineNotice = document.querySelector("#offline-notice");
 
 async function refreshStatus() {
   const response = await fetch("/api/status");
@@ -10,6 +11,7 @@ async function refreshStatus() {
   document.querySelector("#current-job").textContent = data.printer.current_job
     ? `${data.printer.current_job.display_name} - ${data.printer.current_job.project_name}`
     : "None";
+  offlineNotice.hidden = data.printer.connected && !["offline", "unknown"].includes(data.printer.state);
 }
 
 async function refreshQueue() {

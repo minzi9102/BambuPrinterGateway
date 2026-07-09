@@ -96,6 +96,20 @@ button {
   min-height: 24px;
 }
 
+.notice {
+  display: grid;
+  gap: 4px;
+  margin: 18px 0 0;
+  padding: 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  background: #fffbeb;
+}
+
+.notice[hidden] {
+  display: none;
+}
+
 .ams-slots {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -1,0 +1,15 @@
+[Unit]
+Description=Bambu Printer Queue
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bambu-printer-gateway
+EnvironmentFile=/opt/bambu-printer-gateway/.env
+ExecStart=/usr/bin/env uv run --no-sync bambu-queue-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
