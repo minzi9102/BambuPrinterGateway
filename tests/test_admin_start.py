@@ -54,8 +54,8 @@ class FakeAdapter:
     def file_exists(self, remote_path: str, timeout: int) -> bool:
         return self.exists
 
-    def start_print(self, remote_name: str, remote_path: str) -> None:
-        self.started.append((remote_name, remote_path))
+    def start_print(self, remote_name: str, remote_path: str, *, ams_slot=None) -> None:
+        self.started.append((remote_name, remote_path, ams_slot))
         if self.confirm:
             self.printer.normalized_state = "printing"
 
@@ -88,6 +88,9 @@ class AdminStartTests(unittest.TestCase):
             files={"file": (f"{name}.gcode.3mf", sliced_3mf(), "application/octet-stream")},
         )
 
+    def start_next(self, client: TestClient, ams_slot=0):
+        return client.post("/api/admin/start-next", json={"ams_slot": ams_slot}, auth=self.auth())
+
     def statuses(self, db_path: Path):
         conn = open_database(db_path)
         try:
@@ -105,7 +108,7 @@ class AdminStartTests(unittest.TestCase):
         printer = FakePrinter()
         adapter = FakeAdapter(printer)
         with self.make_client(printer, adapter) as (client, _):
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 404)
 
@@ -116,7 +119,7 @@ class AdminStartTests(unittest.TestCase):
         with self.make_client(printer, adapter) as (client, _):
             self.post_job(client)
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 503)
 
@@ -126,7 +129,7 @@ class AdminStartTests(unittest.TestCase):
         with self.make_client(printer, adapter) as (client, _):
             self.post_job(client)
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 409)
 
@@ -143,7 +146,7 @@ class AdminStartTests(unittest.TestCase):
             finally:
                 conn.close()
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 409)
 
@@ -154,7 +157,7 @@ class AdminStartTests(unittest.TestCase):
             first = self.post_job(client, "Alice").json()["id"]
             self.post_job(client, "Bob")
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["job"]["id"], first)
@@ -163,8 +166,61 @@ class AdminStartTests(unittest.TestCase):
             self.assertEqual(client.get("/api/status").json()["printer"]["current_job"]["id"], first)
             self.assertEqual(len(adapter.uploads), 1)
             self.assertEqual(len(adapter.started), 1)
+            self.assertEqual(adapter.started[0][2], 0)
             self.assertEqual(printer.starts, 2)
             self.assertEqual(printer.stops, 1)
+
+    def test_start_next_uses_selected_ams_slot(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.post_job(client)
+
+            response = self.start_next(client, ams_slot=2)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(adapter.started[0][2], 2)
+
+    def test_status_includes_ams_trays(self):
+        printer = FakePrinter()
+        printer.raw_status = {
+            "ams": {
+                "ams": [
+                    {
+                        "tray": [
+                            {
+                                "id": "0",
+                                "tray_type": "PLA",
+                                "tray_sub_brands": "PLA Lite",
+                                "tray_color": "004EA8FF",
+                                "remain": 83,
+                                "tray_id_name": "A18-B1",
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            tray = client.get("/api/status").json()["printer"]["ams_trays"][0]
+
+            self.assertEqual(tray["slot"], 0)
+            self.assertEqual(tray["label"], "AMS Slot 1 - PLA Lite - A18-B1 - 83%")
+
+    def test_invalid_ams_slot_returns_400_and_keeps_queue(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.post_job(client)
+
+            self.assertEqual(client.post("/api/admin/start-next", auth=self.auth()).status_code, 400)
+            for body in ({}, {"ams_slot": "1"}, {"ams_slot": True}, {"ams_slot": -1}, {"ams_slot": 4}):
+                response = client.post("/api/admin/start-next", json=body, auth=self.auth())
+                self.assertEqual(response.status_code, 400)
+
+            self.assertEqual(len(client.get("/api/queue").json()["jobs"]), 1)
+            self.assertEqual(adapter.started, [])
 
     def test_finished_printer_can_start_next_job(self):
         printer = FakePrinter(state="finished")
@@ -172,7 +228,7 @@ class AdminStartTests(unittest.TestCase):
         with self.make_client(printer, adapter) as (client, _):
             self.post_job(client)
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 200)
 
@@ -182,7 +238,7 @@ class AdminStartTests(unittest.TestCase):
         with self.make_client(printer, adapter) as (client, _):
             self.post_job(client)
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 502)
             self.assertEqual(client.get("/api/queue").json()["jobs"], [])
@@ -193,7 +249,7 @@ class AdminStartTests(unittest.TestCase):
         with self.make_client(printer, adapter) as (client, _):
             self.post_job(client)
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 502)
             self.assertEqual(client.get("/api/queue").json()["jobs"], [])
@@ -204,7 +260,7 @@ class AdminStartTests(unittest.TestCase):
         with self.make_client(printer, adapter, timeout=0) as (client, _):
             self.post_job(client)
 
-            response = client.post("/api/admin/start-next", auth=self.auth())
+            response = self.start_next(client)
 
             self.assertEqual(response.status_code, 504)
             self.assertEqual(client.get("/api/queue").json()["jobs"], [])

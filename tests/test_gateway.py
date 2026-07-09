@@ -120,12 +120,24 @@ class BambuAdapterTests(unittest.TestCase):
         self.assertEqual(payload["print"]["command"], "project_file")
         self.assertEqual(payload["print"]["url"], "file:///sdcard/cache/remote.gcode.3mf")
 
+    def test_start_print_can_select_ams_slot(self):
+        adapter = BambuAdapter(PrinterConfig("host", "secret", "serial"))
+        client = Mock()
+        adapter.client = client
+
+        adapter.start_print("remote.gcode.3mf", "cache/remote.gcode.3mf", ams_slot=1)
+
+        payload = json.loads(client.executeClient.send_command.call_args.args[0])
+        self.assertTrue(payload["print"]["use_ams"])
+        self.assertEqual(payload["print"]["ams_mapping"], [1])
+
 
 class GatewayCliTests(unittest.TestCase):
     def test_startup_error_redacts_access_code(self):
         with (
             patch.dict("os.environ", {"PRINTER_ACCESS_CODE": "secret"}, clear=True),
             patch("bambu_printer_gateway.gateway.run_monitor", side_effect=Phase0Error("bad secret")),
+            patch("sys.argv", ["bambu-gateway"]),
             patch("sys.stdout", new_callable=io.StringIO) as stdout,
         ):
             code = main()

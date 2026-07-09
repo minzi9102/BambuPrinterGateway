@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -84,9 +84,46 @@ def job_response(job: Job) -> dict[str, str]:
     }
 
 
+def ams_tray_response(raw_status: dict[str, Any]) -> list[dict[str, Any]]:
+    ams_units = ((raw_status.get("ams") or {}).get("ams") or [])
+    trays = (ams_units[0].get("tray") or []) if ams_units else []
+    response = []
+    for index, tray in enumerate(trays[:4]):
+        try:
+            slot = int(tray.get("id", index))
+        except (TypeError, ValueError):
+            slot = index
+        sub_brand = str(tray.get("tray_sub_brands") or "").strip()
+        material = sub_brand or str(tray.get("tray_type") or "").strip()
+        tray_id = str(tray.get("tray_id_name") or "").strip()
+        remain = tray.get("remain")
+        parts = [f"AMS Slot {slot + 1}", material, tray_id]
+        if isinstance(remain, int) and remain >= 0:
+            parts.append(f"{remain}%")
+        response.append(
+            {
+                "slot": slot,
+                "label": " - ".join(part for part in parts if part),
+                "type": tray.get("tray_type"),
+                "sub_brand": tray.get("tray_sub_brands"),
+                "color": tray.get("tray_color"),
+                "remain": remain,
+                "tray_id_name": tray.get("tray_id_name"),
+            }
+        )
+    return response
+
+
+def ams_slot_from_body(body: dict[str, Any] | None) -> int:
+    slot = (body or {}).get("ams_slot")
+    if isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot <= 3:
+        raise HTTPException(400, "ams_slot must be an integer from 0 to 3.")
+    return slot
+
+
 def status_response(printer_service: object | None, queue: QueueService) -> dict[str, Any]:
     if not printer_service:
-        return {"printer": {"connected": False, "state": "unknown"}}
+        return {"printer": {"connected": False, "state": "unknown", "ams_trays": []}}
     raw_status = getattr(printer_service, "raw_status", None) or {}
     printer = {
         "connected": bool(getattr(printer_service, "connected", False)),
@@ -97,6 +134,7 @@ def status_response(printer_service: object | None, queue: QueueService) -> dict
         "layer": raw_status.get("layer_num"),
         "total_layers": raw_status.get("total_layer_num"),
         "current_job": None,
+        "ams_trays": ams_tray_response(raw_status),
     }
     active = queue.get_active_job()
     if active and active.status == JobStatus.PRINTING:
@@ -243,7 +281,8 @@ def create_app(
         return JSONResponse({"id": job.id, "status": job.status.value, "position": position})
 
     @app.post("/api/admin/start-next")
-    async def start_next_job(_: None = Depends(require_admin)):
+    async def start_next_job(body: dict[str, Any] | None = Body(default=None), _: None = Depends(require_admin)):
+        ams_slot = ams_slot_from_body(body)
         if operation_lock.locked():
             raise HTTPException(409, "Printer operation already in progress.")
         if not printer_service or not adapter or not getattr(printer_service, "connected", False):
@@ -269,7 +308,7 @@ def create_app(
                     raise HTTPException(502, "Uploaded file was not found on printer.")
                 job = states.change_job_state(job.id, JobStatus.STARTING)
                 await refresh_printer_connection(printer_service)
-                await asyncio.to_thread(adapter.start_print, job.remote_filename, remote_path)
+                await asyncio.to_thread(adapter.start_print, job.remote_filename, remote_path, ams_slot=ams_slot)
                 if not await wait_for_printing(printer_service, start_timeout):
                     states.change_job_state(job.id, JobStatus.FAILED, "Printer did not confirm print start")
                     await hub.broadcast({"type": "job.changed"})

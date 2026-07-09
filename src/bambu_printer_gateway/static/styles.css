@@ -67,13 +67,15 @@ label {
 }
 
 input,
+select,
 button {
   width: 100%;
   min-height: 42px;
   font: inherit;
 }
 
-input {
+input,
+select {
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   padding: 8px 10px;

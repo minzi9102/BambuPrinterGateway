@@ -153,10 +153,11 @@ class BambuAdapter:
         files = list_remote_files(self.curl or find_curl(), self.config, remote.parent.as_posix(), timeout)
         return remote.name in files
 
-    def start_print(self, remote_name: str, remote_path: str) -> None:
+    def start_print(self, remote_name: str, remote_path: str, *, ams_slot: int | None = None) -> None:
         if not self.client:
             raise Phase0Error("打印机客户端尚未连接")
-        self.client.executeClient.send_command(build_project_file_payload(remote_name, remote_path))
+        kwargs = {} if ams_slot is None else {"use_ams": True, "ams_mapping": [ams_slot]}
+        self.client.executeClient.send_command(build_project_file_payload(remote_name, remote_path, **kwargs))
 
     def disconnect(self) -> None:
         if not self.client:
