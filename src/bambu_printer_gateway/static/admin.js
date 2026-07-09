@@ -3,13 +3,14 @@ const connected = document.querySelector("#printer-connected");
 const nextJob = document.querySelector("#next-job");
 const message = document.querySelector("#message");
 const button = document.querySelector("#start-next");
-const amsSlot = document.querySelector("#ams-slot");
+const amsSlots = document.querySelector("#ams-slots");
 const debugToggle = document.querySelector("#debug-toggle");
 const debugPanel = document.querySelector("#debug-panel");
 const debugRefresh = document.querySelector("#debug-refresh");
 const debugUpdated = document.querySelector("#debug-updated");
 const debugOutput = document.querySelector("#debug-output");
 let authHeader = null;
+let selectedAmsSlot = 0;
 
 function ensureAuth() {
   if (!authHeader) {
@@ -20,19 +21,37 @@ function ensureAuth() {
 }
 
 function renderAmsSlots(trays) {
-  const selected = amsSlot.value || "0";
-  const options = trays.length
-    ? trays
-    : [0, 1, 2, 3].map((slot) => ({ slot, label: `AMS Slot ${slot + 1}` }));
-  amsSlot.replaceChildren(
+  const bySlot = new Map(trays.map((tray) => [tray.slot, tray]));
+  const options = [0, 1, 2, 3].map((slot) => bySlot.get(slot) || { slot, label: `AMS Slot ${slot + 1}` });
+  amsSlots.replaceChildren(
     ...options.map((tray) => {
-      const option = document.createElement("option");
-      option.value = String(tray.slot);
-      option.textContent = tray.label;
-      return option;
+      const card = document.createElement("button");
+      const color = String(tray.color || "");
+      const cssColor = /^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(color) ? `#${color.slice(0, 6)}` : "#94a3b8";
+      const details = tray.label.replace(`AMS Slot ${tray.slot + 1}`, "").replace(/^ - /, "") || "No material data";
+      card.type = "button";
+      card.className = "ams-slot-card";
+      card.dataset.slot = String(tray.slot);
+      card.setAttribute("role", "radio");
+      card.setAttribute("aria-checked", String(tray.slot === selectedAmsSlot));
+      const swatch = document.createElement("span");
+      const copy = document.createElement("span");
+      const title = document.createElement("strong");
+      const description = document.createElement("span");
+      swatch.className = "ams-color";
+      swatch.style.background = cssColor;
+      copy.className = "ams-slot-copy";
+      title.textContent = `AMS Slot ${tray.slot + 1}`;
+      description.textContent = details;
+      copy.append(title, description);
+      card.append(swatch, copy);
+      card.addEventListener("click", () => {
+        selectedAmsSlot = tray.slot;
+        renderAmsSlots(trays);
+      });
+      return card;
     }),
   );
-  amsSlot.value = options.some((tray) => String(tray.slot) === selected) ? selected : "0";
 }
 
 async function refresh() {
@@ -56,12 +75,12 @@ button.addEventListener("click", async () => {
   const response = await fetch("/api/admin/start-next", {
     method: "POST",
     headers: { Authorization: authHeader, "Content-Type": "application/json" },
-    body: JSON.stringify({ ams_slot: Number(amsSlot.value) }),
+    body: JSON.stringify({ ams_slot: selectedAmsSlot }),
   });
   if (response.status === 401) authHeader = null;
   if (response.ok) {
     const data = await response.json();
-    message.textContent = `Started ${data.job.display_name} - ${data.job.project_name} with AMS Slot ${Number(amsSlot.value) + 1}`;
+    message.textContent = `Started ${data.job.display_name} - ${data.job.project_name} with AMS Slot ${selectedAmsSlot + 1}`;
     await refresh();
     return;
   }

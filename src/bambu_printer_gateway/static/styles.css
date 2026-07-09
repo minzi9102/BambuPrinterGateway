@@ -20,7 +20,8 @@ section {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   margin: 0 0 16px;
 }
 
@@ -93,6 +94,67 @@ button {
 
 #message {
   min-height: 24px;
+}
+
+.ams-slots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ams-slot-card {
+  display: flex;
+  min-height: 78px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2937;
+  text-align: left;
+}
+
+.ams-slot-card[aria-checked="true"] {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.ams-color {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgb(15 23 42 / 22%);
+  border-radius: 999px;
+}
+
+.ams-slot-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ams-slot-copy strong,
+.ams-slot-copy span {
+  overflow-wrap: anywhere;
+}
+
+.ams-slot-copy span {
+  color: #667085;
+  font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .ams-slots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .ams-slots {
+    grid-template-columns: 1fr;
+  }
 }
 
 .debug-toggle {
