@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bambu Printer Admin</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <section>
+        <h1>Admin</h1>
+        <dl>
+          <div>
+            <dt>Status</dt>
+            <dd id="printer-state">unknown</dd>
+          </div>
+          <div>
+            <dt>Connected</dt>
+            <dd id="printer-connected">false</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Next Job</h2>
+        <p id="next-job">None</p>
+        <button id="start-next" type="button">Start Next Job</button>
+        <p id="message" role="status"></p>
+      </section>
+    </main>
+    <script src="/admin.js"></script>
+  </body>
+</html>

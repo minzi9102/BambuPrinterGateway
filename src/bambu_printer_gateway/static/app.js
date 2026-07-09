@@ -7,6 +7,9 @@ async function refreshStatus() {
   const data = await response.json();
   document.querySelector("#printer-state").textContent = data.printer.state;
   document.querySelector("#printer-connected").textContent = String(data.printer.connected);
+  document.querySelector("#current-job").textContent = data.printer.current_job
+    ? `${data.printer.current_job.display_name} - ${data.printer.current_job.project_name}`
+    : "None";
 }
 
 async function refreshQueue() {
@@ -43,6 +46,10 @@ function connectSocket() {
   socket.addEventListener("message", (event) => {
     const data = JSON.parse(event.data);
     if (data.type === "queue.changed") refreshQueue();
+    if (data.type === "job.changed") {
+      refreshStatus();
+      refreshQueue();
+    }
   });
   socket.addEventListener("close", () => setTimeout(connectSocket, 1000));
 }
@@ -51,6 +58,7 @@ refreshStatus();
 refreshQueue();
 connectSocket();
 setInterval(refreshQueue, 5000);
+setInterval(refreshStatus, 5000);
 window.addEventListener("focus", refreshQueue);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshQueue();

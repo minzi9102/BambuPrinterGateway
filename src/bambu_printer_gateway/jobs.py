@@ -148,6 +148,19 @@ class QueueService:
         ).fetchone()
         return row_to_job(row) if row else None
 
+    def get_active_job(self) -> Job | None:
+        row = self.conn.execute(
+            """
+            SELECT *
+            FROM jobs
+            WHERE status IN (?, ?, ?)
+            ORDER BY queue_sequence ASC
+            LIMIT 1
+            """,
+            (JobStatus.UPLOADING.value, JobStatus.STARTING.value, JobStatus.PRINTING.value),
+        ).fetchone()
+        return row_to_job(row) if row else None
+
     def cancel_job(self, job_id: str) -> Job:
         job = self._get_job(job_id)
         if job.status != JobStatus.QUEUED:
