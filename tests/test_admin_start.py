@@ -25,6 +25,16 @@ class FakePrinter:
         self.connected = connected
         self.normalized_state = state
         self.raw_status = {"mc_percent": 0}
+        self.starts = 0
+        self.stops = 0
+
+    def start(self):
+        self.starts += 1
+        self.connected = True
+
+    def stop(self):
+        self.stops += 1
+        self.connected = False
 
 
 class FakeAdapter:
@@ -101,6 +111,7 @@ class AdminStartTests(unittest.TestCase):
 
     def test_disconnected_printer_returns_503(self):
         printer = FakePrinter(connected=False)
+        printer.start = None
         adapter = FakeAdapter(printer)
         with self.make_client(printer, adapter) as (client, _):
             self.post_job(client)
@@ -152,6 +163,8 @@ class AdminStartTests(unittest.TestCase):
             self.assertEqual(client.get("/api/status").json()["printer"]["current_job"]["id"], first)
             self.assertEqual(len(adapter.uploads), 1)
             self.assertEqual(len(adapter.started), 1)
+            self.assertEqual(printer.starts, 2)
+            self.assertEqual(printer.stops, 1)
 
     def test_finished_printer_can_start_next_job(self):
         printer = FakePrinter(state="finished")

@@ -113,6 +113,14 @@ async def wait_for_printing(printer_service: object, timeout: int) -> bool:
     return False
 
 
+async def refresh_printer_connection(printer_service: object) -> None:
+    stop = getattr(printer_service, "stop", None)
+    start = getattr(printer_service, "start", None)
+    if callable(stop) and callable(start):
+        await asyncio.to_thread(stop)
+        await asyncio.to_thread(start)
+
+
 async def save_upload(file: UploadFile, upload_dir: Path, max_bytes: int) -> tuple[str, Path]:
     upload_dir.mkdir(parents=True, exist_ok=True)
     stored_filename = f"{uuid.uuid4().hex}.gcode.3mf"
@@ -260,6 +268,7 @@ def create_app(
                     await hub.broadcast({"type": "job.changed"})
                     raise HTTPException(502, "Uploaded file was not found on printer.")
                 job = states.change_job_state(job.id, JobStatus.STARTING)
+                await refresh_printer_connection(printer_service)
                 await asyncio.to_thread(adapter.start_print, job.remote_filename, remote_path)
                 if not await wait_for_printing(printer_service, start_timeout):
                     states.change_job_state(job.id, JobStatus.FAILED, "Printer did not confirm print start")
