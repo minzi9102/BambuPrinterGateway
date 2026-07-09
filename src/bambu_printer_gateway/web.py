@@ -24,6 +24,7 @@ from .phase0 import Phase0Error, PrinterConfig, validate_print_file
 
 CHUNK_SIZE = 1024 * 1024
 START_READY_STATES = {"idle", "finished", "failed"}
+COMPLETED_PRINTER_STATES = {"idle", "finished"}
 security = HTTPBasic()
 
 
@@ -198,18 +199,23 @@ async def refresh_printer_connection(printer_service: object) -> None:
         await asyncio.to_thread(start)
 
 
-async def reconcile_failed_active_job(
+async def reconcile_active_job(
     printer_state: str | None,
     queue: QueueService,
     states: JobStateService,
     hub: RealtimeHub,
 ) -> None:
-    if printer_state != "failed":
-        return
     active = queue.get_active_job()
-    if active and active.status == JobStatus.PRINTING:
+    if not active or active.status != JobStatus.PRINTING:
+        return
+    if printer_state in COMPLETED_PRINTER_STATES:
+        states.change_job_state(active.id, JobStatus.COMPLETED)
+    elif printer_state == "failed":
         states.change_job_state(active.id, JobStatus.FAILED, "Printer reported FAILED")
-        await hub.broadcast({"type": "job.changed"})
+    else:
+        return
+    await hub.broadcast({"type": "job.changed"})
+    await hub.broadcast({"type": "queue.changed"})
 
 
 async def save_upload(file: UploadFile, upload_dir: Path, max_bytes: int) -> tuple[str, Path]:
@@ -297,7 +303,9 @@ def create_app(
     app = FastAPI(lifespan=lifespan)
 
     @app.get("/api/status")
-    def get_status():
+    async def get_status():
+        if printer_service:
+            await reconcile_active_job(getattr(printer_service, "normalized_state", None), queue, states, hub)
         return status_response(printer_service, queue)
 
     @app.get("/api/admin/debug")
@@ -349,7 +357,7 @@ def create_app(
             raise HTTPException(409, "Printer is not idle.")
 
         async with operation_lock:
-            await reconcile_failed_active_job(printer_state, queue, states, hub)
+            await reconcile_active_job(printer_state, queue, states, hub)
             if queue.get_active_job():
                 raise HTTPException(409, "A job is already active.")
             job = queue.get_next_job()

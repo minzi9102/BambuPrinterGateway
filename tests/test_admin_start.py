@@ -106,6 +106,14 @@ class AdminStartTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def set_job_status(self, db_path: Path, job_id: str, status: JobStatus):
+        conn = open_database(db_path)
+        try:
+            conn.execute("UPDATE jobs SET status = ? WHERE id = ?", (status.value, job_id))
+            conn.commit()
+        finally:
+            conn.close()
+
     def test_start_next_requires_auth(self):
         printer = FakePrinter()
         adapter = FakeAdapter(printer)
@@ -149,10 +157,9 @@ class AdminStartTests(unittest.TestCase):
             conn = open_database(root / "queue.db")
             try:
                 job = QueueService(conn).get_next_job()
-                conn.execute("UPDATE jobs SET status = ? WHERE id = ?", (JobStatus.PRINTING.value, job.id))
-                conn.commit()
             finally:
                 conn.close()
+            self.set_job_status(root / "queue.db", job.id, JobStatus.STARTING)
 
             response = self.start_next(client)
 
@@ -274,6 +281,52 @@ class AdminStartTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
 
+    def test_status_marks_finished_printing_job_completed(self):
+        printer = FakePrinter(state="finished")
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+            self.set_job_status(root / "queue.db", job_id, JobStatus.PRINTING)
+
+            printer_status = client.get("/api/status").json()["printer"]
+
+            self.assertIsNone(printer_status["current_job"])
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.COMPLETED.value)
+
+    def test_status_marks_idle_printing_job_completed(self):
+        printer = FakePrinter(state="idle")
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+            self.set_job_status(root / "queue.db", job_id, JobStatus.PRINTING)
+
+            client.get("/api/status")
+
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.COMPLETED.value)
+
+    def test_status_marks_failed_printing_job_failed(self):
+        printer = FakePrinter(state="failed")
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+            self.set_job_status(root / "queue.db", job_id, JobStatus.PRINTING)
+
+            client.get("/api/status")
+
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.FAILED.value)
+
+    def test_status_does_not_complete_uploading_or_starting_jobs(self):
+        for status in (JobStatus.UPLOADING, JobStatus.STARTING):
+            printer = FakePrinter(state="finished")
+            adapter = FakeAdapter(printer)
+            with self.make_client(printer, adapter) as (client, root):
+                job_id = self.post_job(client).json()["id"]
+                self.set_job_status(root / "queue.db", job_id, status)
+
+                client.get("/api/status")
+
+                self.assertEqual(self.job_status(root / "queue.db", job_id), status.value)
+
     def test_failed_printer_can_start_next_job(self):
         printer = FakePrinter(state="failed")
         adapter = FakeAdapter(printer)
@@ -303,6 +356,20 @@ class AdminStartTests(unittest.TestCase):
             self.assertEqual(response.json()["job"]["id"], next_job)
             self.assertEqual(self.job_status(root / "queue.db", stale), JobStatus.FAILED.value)
             self.assertEqual(adapter.started[0][2], 0)
+
+    def test_finished_printer_completes_active_job_before_starting_next(self):
+        printer = FakePrinter(state="finished")
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            stale = self.post_job(client, "Stale").json()["id"]
+            next_job = self.post_job(client, "Next").json()["id"]
+            self.set_job_status(root / "queue.db", stale, JobStatus.PRINTING)
+
+            response = self.start_next(client)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["job"]["id"], next_job)
+            self.assertEqual(self.job_status(root / "queue.db", stale), JobStatus.COMPLETED.value)
 
     def test_upload_failure_marks_job_failed(self):
         printer = FakePrinter()
