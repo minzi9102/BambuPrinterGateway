@@ -74,6 +74,7 @@ MONITORED_FIELDS = (
 )
 
 STATE_MAP = {
+    "FAILED": "failed",
     "FINISH": "finished",
     "IDLE": "idle",
     "PAUSE": "paused",
