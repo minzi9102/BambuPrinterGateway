@@ -98,6 +98,14 @@ class AdminStartTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def job_status(self, db_path: Path, job_id: str):
+        conn = open_database(db_path)
+        try:
+            row = conn.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            return row["status"]
+        finally:
+            conn.close()
+
     def test_start_next_requires_auth(self):
         printer = FakePrinter()
         adapter = FakeAdapter(printer)
@@ -265,6 +273,36 @@ class AdminStartTests(unittest.TestCase):
             response = self.start_next(client)
 
             self.assertEqual(response.status_code, 200)
+
+    def test_failed_printer_can_start_next_job(self):
+        printer = FakePrinter(state="failed")
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.post_job(client)
+
+            response = self.start_next(client)
+
+            self.assertEqual(response.status_code, 200)
+
+    def test_failed_printer_marks_active_printing_job_failed_before_start(self):
+        printer = FakePrinter(state="failed")
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            stale = self.post_job(client, "Stale").json()["id"]
+            next_job = self.post_job(client, "Next").json()["id"]
+            conn = open_database(root / "queue.db")
+            try:
+                conn.execute("UPDATE jobs SET status = ? WHERE id = ?", (JobStatus.PRINTING.value, stale))
+                conn.commit()
+            finally:
+                conn.close()
+
+            response = self.start_next(client)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["job"]["id"], next_job)
+            self.assertEqual(self.job_status(root / "queue.db", stale), JobStatus.FAILED.value)
+            self.assertEqual(adapter.started[0][2], 0)
 
     def test_upload_failure_marks_job_failed(self):
         printer = FakePrinter()

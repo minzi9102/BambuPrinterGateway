@@ -23,6 +23,7 @@ from .jobs import Job, JobStateService, JobStatus, QueueService
 from .phase0 import Phase0Error, PrinterConfig, validate_print_file
 
 CHUNK_SIZE = 1024 * 1024
+START_READY_STATES = {"idle", "finished", "failed"}
 security = HTTPBasic()
 
 
@@ -197,6 +198,20 @@ async def refresh_printer_connection(printer_service: object) -> None:
         await asyncio.to_thread(start)
 
 
+async def reconcile_failed_active_job(
+    printer_state: str | None,
+    queue: QueueService,
+    states: JobStateService,
+    hub: RealtimeHub,
+) -> None:
+    if printer_state != "failed":
+        return
+    active = queue.get_active_job()
+    if active and active.status == JobStatus.PRINTING:
+        states.change_job_state(active.id, JobStatus.FAILED, "Printer reported FAILED")
+        await hub.broadcast({"type": "job.changed"})
+
+
 async def save_upload(file: UploadFile, upload_dir: Path, max_bytes: int) -> tuple[str, Path]:
     upload_dir.mkdir(parents=True, exist_ok=True)
     stored_filename = f"{uuid.uuid4().hex}.gcode.3mf"
@@ -329,12 +344,14 @@ def create_app(
             raise HTTPException(409, "Printer operation already in progress.")
         if not printer_service or not adapter or not getattr(printer_service, "connected", False):
             raise HTTPException(503, "Printer is not connected.")
-        if getattr(printer_service, "normalized_state", None) not in {"idle", "finished"}:
+        printer_state = getattr(printer_service, "normalized_state", None)
+        if printer_state not in START_READY_STATES:
             raise HTTPException(409, "Printer is not idle.")
-        if queue.get_active_job():
-            raise HTTPException(409, "A job is already active.")
 
         async with operation_lock:
+            await reconcile_failed_active_job(printer_state, queue, states, hub)
+            if queue.get_active_job():
+                raise HTTPException(409, "A job is already active.")
             job = queue.get_next_job()
             if not job:
                 raise HTTPException(404, "No queued jobs.")
