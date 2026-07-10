@@ -41,7 +41,22 @@ class QueueTests(unittest.TestCase):
             cancelled = queue.cancel_job(second.id)
 
             self.assertEqual(cancelled.status, JobStatus.CANCELLED)
+            self.assertIsNotNone(cancelled.finished_at)
             self.assertEqual([job.id for job in queue.get_queue()], [first.id, third.id])
+            conn.close()
+
+    def test_history_returns_latest_100_terminal_jobs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            conn, queue, _ = self.open_queue(Path(directory, "queue.db"))
+            cancelled = [self.create_job(queue, f"job-{index}") for index in range(101)]
+            for job in cancelled:
+                queue.cancel_job(job.id)
+            self.create_job(queue, "still-queued")
+
+            history = queue.get_history()
+
+            self.assertEqual(len(history), 100)
+            self.assertEqual([job.id for job in history], [job.id for job in reversed(cancelled[1:])])
             conn.close()
 
     def test_completed_job_does_not_reenter_queue(self):

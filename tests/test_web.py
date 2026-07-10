@@ -10,7 +10,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from bambu_printer_gateway.database import open_database
-from bambu_printer_gateway.jobs import JobStatus, QueueService
+from bambu_printer_gateway.jobs import JobStateService, JobStatus, QueueService
 from bambu_printer_gateway.phase0 import START_GCODE
 from bambu_printer_gateway.web import create_app
 
@@ -151,6 +151,32 @@ class WebTests(unittest.TestCase):
             self.assertEqual(response.json(), {"detail": "Queue database error."})
             self.assertNotIn("secret", response.text)
 
+    def test_history_hides_errors_publicly_and_shows_them_to_admin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            db_path = root / "queue.db"
+            conn = open_database(db_path)
+            queue = QueueService(conn)
+            job = queue.create_job("Alice", "Failed Project", "a.3mf", "a.3mf", "a")
+            states = JobStateService(conn)
+            states.change_job_state(job.id, JobStatus.UPLOADING)
+            states.change_job_state(job.id, JobStatus.FAILED, "private printer path")
+            conn.close()
+            app = create_app(
+                database_path=db_path,
+                upload_dir=root / "uploads",
+                admin_username="root",
+                admin_password="secret",
+            )
+            with TestClient(app) as client:
+                public = client.get("/api/history")
+                unauthorized = client.get("/api/admin/history")
+                admin = client.get("/api/admin/history", auth=("root", "secret"))
+
+        self.assertNotIn("error_message", public.json()["jobs"][0])
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(admin.json()["jobs"][0]["error_message"], "private printer path")
+
     def test_public_page_contains_offline_notice(self):
         static_dir = Path(__file__).resolve().parents[1] / "src" / "bambu_printer_gateway" / "static"
         html = (static_dir / "index.html").read_text(encoding="utf-8")
@@ -163,6 +189,13 @@ class WebTests(unittest.TestCase):
         self.assertIn('"offline"', script)
         self.assertIn('"unknown"', script)
         self.assertIn(".notice[hidden]", styles)
+
+    def test_public_and_admin_pages_include_history(self):
+        static_dir = Path(__file__).resolve().parents[1] / "src" / "bambu_printer_gateway" / "static"
+
+        for page, script in (("index.html", "app.js"), ("admin.html", "admin.js")):
+            self.assertIn('id="history"', (static_dir / page).read_text(encoding="utf-8"))
+            self.assertIn("refreshHistory", (static_dir / script).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

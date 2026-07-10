@@ -161,14 +161,31 @@ class QueueService:
         ).fetchone()
         return row_to_job(row) if row else None
 
+    def get_history(self) -> list[Job]:
+        rows = self.conn.execute(
+            """
+            SELECT *
+            FROM jobs
+            WHERE status IN (?, ?, ?)
+            ORDER BY COALESCE(finished_at, created_at) DESC, queue_sequence DESC
+            LIMIT 100
+            """,
+            (
+                JobStatus.COMPLETED.value,
+                JobStatus.FAILED.value,
+                JobStatus.CANCELLED.value,
+            ),
+        ).fetchall()
+        return [row_to_job(row) for row in rows]
+
     def cancel_job(self, job_id: str) -> Job:
         job = self._get_job(job_id)
         if job.status != JobStatus.QUEUED:
             raise QueueError(f"only queued jobs can be cancelled: {job_id}")
         with self.conn:
             self.conn.execute(
-                "UPDATE jobs SET status = ? WHERE id = ?",
-                (JobStatus.CANCELLED.value, job_id),
+                "UPDATE jobs SET status = ?, finished_at = ? WHERE id = ?",
+                (JobStatus.CANCELLED.value, now(), job_id),
             )
         return self._get_job(job_id)
 

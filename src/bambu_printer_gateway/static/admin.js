@@ -4,6 +4,7 @@ const nextJob = document.querySelector("#next-job");
 const message = document.querySelector("#message");
 const button = document.querySelector("#start-next");
 const amsSlots = document.querySelector("#ams-slots");
+const historyList = document.querySelector("#history");
 const debugToggle = document.querySelector("#debug-toggle");
 const debugPanel = document.querySelector("#debug-panel");
 const debugRefresh = document.querySelector("#debug-refresh");
@@ -15,9 +16,33 @@ let selectedAmsSlot = 0;
 function ensureAuth() {
   if (!authHeader) {
     const username = prompt("Admin username");
+    if (username === null) return false;
     const password = prompt("Admin password");
+    if (password === null) return false;
     authHeader = `Basic ${btoa(`${username}:${password}`)}`;
   }
+  return true;
+}
+
+async function refreshHistory() {
+  let response = authHeader
+    ? await fetch("/api/admin/history", { headers: { Authorization: authHeader } })
+    : await fetch("/api/history");
+  if (response.status === 401) {
+    authHeader = null;
+    response = await fetch("/api/history");
+  }
+  const data = await response.json();
+  historyList.replaceChildren(
+    ...data.jobs.map((job) => {
+      const item = document.createElement("li");
+      const finished = job.finished_at ? new Date(job.finished_at).toLocaleString() : "Unknown time";
+      const error = job.error_message ? ` · ${job.error_message}` : "";
+      item.textContent = `${job.display_name} - ${job.project_name} · ${job.status} · ${finished}${error}`;
+      return item;
+    }),
+  );
+  if (!data.jobs.length) historyList.textContent = "No print history.";
 }
 
 function renderAmsSlots(trays) {
@@ -86,11 +111,15 @@ async function refresh() {
   nextJob.textContent = queue.jobs[0]
     ? `${queue.jobs[0].display_name} - ${queue.jobs[0].project_name}`
     : "None";
+  await refreshHistory();
 }
 
 button.addEventListener("click", async () => {
   message.textContent = "Starting...";
-  ensureAuth();
+  if (!ensureAuth()) {
+    message.textContent = "Admin login cancelled.";
+    return;
+  }
   const response = await fetch("/api/admin/start-next", {
     method: "POST",
     headers: { Authorization: authHeader, "Content-Type": "application/json" },
@@ -108,7 +137,7 @@ button.addEventListener("click", async () => {
 });
 
 async function refreshDebug() {
-  ensureAuth();
+  if (!ensureAuth()) return;
   debugOutput.textContent = "Loading...";
   const [statusResponse, queueResponse, debugResponse] = await Promise.all([
     fetch("/api/status"),
@@ -138,6 +167,7 @@ function connectSocket() {
   socket.addEventListener("close", () => setTimeout(connectSocket, 1000));
 }
 
+ensureAuth();
 refresh();
 connectSocket();
 setInterval(refresh, 5000);

@@ -2,7 +2,8 @@
 
 当前实现了本地 Web 队列：公共页面上传 sliced `.gcode.3mf`，管理员页面手动启动队首任务。
 队列使用 SQLite 持久化，服务重启后 `QUEUED` 和 `PRINTING` 任务会保留；重启时遗留的
-`UPLOADING` / `STARTING` 任务会标记为 `FAILED`。
+`UPLOADING` / `STARTING` 任务会标记为 `FAILED`。首页和管理员页显示最近 100 条打印历史，
+公共首页隐藏失败详情，管理员认证后可查看具体错误。
 
 ## Web Queue
 

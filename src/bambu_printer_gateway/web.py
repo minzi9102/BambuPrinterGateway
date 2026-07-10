@@ -89,6 +89,24 @@ def job_response(job: Job) -> dict[str, str]:
     }
 
 
+def history_response(queue: QueueService, *, include_error: bool = False) -> dict[str, list[dict[str, Any]]]:
+    jobs = []
+    for job in queue.get_history():
+        item = {
+            "id": job.id,
+            "display_name": job.display_name,
+            "project_name": job.project_name,
+            "status": job.status.value,
+            "created_at": job.created_at,
+            "started_at": job.started_at,
+            "finished_at": job.finished_at,
+        }
+        if include_error:
+            item["error_message"] = job.error_message
+        jobs.append(item)
+    return {"jobs": jobs}
+
+
 def ams_tray_response(raw_status: dict[str, Any]) -> list[dict[str, Any]]:
     ams_units = ((raw_status.get("ams") or {}).get("ams") or [])
     trays = (ams_units[0].get("tray") or []) if ams_units else []
@@ -337,9 +355,17 @@ def create_app(
     def get_admin_debug(_: None = Depends(require_admin)):
         return debug_response(printer_service, queue)
 
+    @app.get("/api/admin/history")
+    def get_admin_history(_: None = Depends(require_admin)):
+        return history_response(queue, include_error=True)
+
     @app.get("/api/queue")
     def get_queue():
         return queue_response(queue)
+
+    @app.get("/api/history")
+    def get_history():
+        return history_response(queue)
 
     @app.post("/api/jobs")
     async def create_job(

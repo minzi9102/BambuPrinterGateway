@@ -1,4 +1,5 @@
 const queueList = document.querySelector("#queue");
+const historyList = document.querySelector("#history");
 const message = document.querySelector("#message");
 const form = document.querySelector("#job-form");
 const offlineNotice = document.querySelector("#offline-notice");
@@ -26,6 +27,20 @@ async function refreshQueue() {
   );
 }
 
+async function refreshHistory() {
+  const response = await fetch("/api/history");
+  const data = await response.json();
+  historyList.replaceChildren(
+    ...data.jobs.map((job) => {
+      const item = document.createElement("li");
+      const finished = job.finished_at ? new Date(job.finished_at).toLocaleString() : "Unknown time";
+      item.textContent = `${job.display_name} - ${job.project_name} · ${job.status} · ${finished}`;
+      return item;
+    }),
+  );
+  if (!data.jobs.length) historyList.textContent = "No print history.";
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   message.textContent = "Uploading...";
@@ -51,6 +66,7 @@ function connectSocket() {
     if (data.type === "job.changed") {
       refreshStatus();
       refreshQueue();
+      refreshHistory();
     }
   });
   socket.addEventListener("close", () => setTimeout(connectSocket, 1000));
@@ -58,9 +74,11 @@ function connectSocket() {
 
 refreshStatus();
 refreshQueue();
+refreshHistory();
 connectSocket();
 setInterval(refreshQueue, 5000);
 setInterval(refreshStatus, 5000);
+setInterval(refreshHistory, 5000);
 window.addEventListener("focus", refreshQueue);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshQueue();
