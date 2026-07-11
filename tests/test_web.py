@@ -197,6 +197,21 @@ class WebTests(unittest.TestCase):
             self.assertIn('id="history"', (static_dir / page).read_text(encoding="utf-8"))
             self.assertIn("refreshHistory", (static_dir / script).read_text(encoding="utf-8"))
 
+    def test_pages_show_active_and_queued_job_states(self):
+        static_dir = Path(__file__).resolve().parents[1] / "src" / "bambu_printer_gateway" / "static"
+        public_html = (static_dir / "index.html").read_text(encoding="utf-8")
+        public_script = (static_dir / "app.js").read_text(encoding="utf-8")
+        admin_html = (static_dir / "admin.html").read_text(encoding="utf-8")
+        admin_script = (static_dir / "admin.js").read_text(encoding="utf-8")
+
+        self.assertIn("app.js?v=job-status-1", public_html)
+        self.assertIn("Reconnecting and starting", public_script)
+        self.assertIn('id="active-job"', admin_html)
+        self.assertIn("Next Queued Job", admin_html)
+        self.assertIn("admin.js?v=job-status-1", admin_html)
+        self.assertIn('button.textContent = active', admin_script)
+        self.assertIn('button.disabled = Boolean(active) || !queue.jobs[0]', admin_script)
+
 
 if __name__ == "__main__":
     unittest.main()

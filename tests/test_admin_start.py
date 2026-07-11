@@ -165,6 +165,22 @@ class AdminStartTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 409)
 
+    def test_status_shows_reconnecting_active_job(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+            self.set_job_status(root / "queue.db", job_id, JobStatus.STARTING)
+            printer.connected = False
+            printer.normalized_state = "offline"
+
+            printer_status = client.get("/api/status").json()["printer"]
+
+            self.assertFalse(printer_status["connected"])
+            self.assertEqual(printer_status["state"], "reconnecting")
+            self.assertEqual(printer_status["current_job"]["id"], job_id)
+            self.assertEqual(printer_status["current_job"]["status"], "STARTING")
+
     def test_success_starts_first_job_and_leaves_second_queued(self):
         printer = FakePrinter()
         adapter = FakeAdapter(printer)
@@ -195,6 +211,27 @@ class AdminStartTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(adapter.started[0][2], 2)
+
+    def test_start_broadcasts_active_state_changes(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.post_job(client)
+            with client.websocket_connect("/ws") as websocket:
+                response = self.start_next(client)
+                events = [websocket.receive_json() for _ in range(5)]
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                events,
+                [
+                    {"type": "queue.changed"},
+                    {"type": "job.changed"},
+                    {"type": "job.changed"},
+                    {"type": "job.changed"},
+                    {"type": "queue.changed"},
+                ],
+            )
 
     def test_status_includes_ams_trays(self):
         printer = FakePrinter()
@@ -323,9 +360,11 @@ class AdminStartTests(unittest.TestCase):
                 job_id = self.post_job(client).json()["id"]
                 self.set_job_status(root / "queue.db", job_id, status)
 
-                client.get("/api/status")
+                current = client.get("/api/status").json()["printer"]["current_job"]
 
                 self.assertEqual(self.job_status(root / "queue.db", job_id), status.value)
+                self.assertEqual(current["id"], job_id)
+                self.assertEqual(current["status"], status.value)
 
     def test_failed_printer_can_start_next_job(self):
         printer = FakePrinter(state="failed")

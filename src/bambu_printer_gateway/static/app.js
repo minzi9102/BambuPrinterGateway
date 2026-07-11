@@ -9,9 +9,13 @@ async function refreshStatus() {
   const data = await response.json();
   document.querySelector("#printer-state").textContent = data.printer.state;
   document.querySelector("#printer-connected").textContent = String(data.printer.connected);
-  document.querySelector("#current-job").textContent = data.printer.current_job
-    ? `${data.printer.current_job.display_name} - ${data.printer.current_job.project_name}`
-    : "None";
+  const job = data.printer.current_job;
+  const phase = job?.status === "STARTING" && !data.printer.connected
+    ? "Reconnecting and starting"
+    : { UPLOADING: "Uploading", STARTING: "Starting", PRINTING: "Printing" }[job?.status];
+  document.querySelector("#current-job").textContent = job
+    ? `${job.display_name} - ${job.project_name} · ${phase}`
+    : "No active job";
   offlineNotice.hidden = data.printer.connected && !["offline", "unknown"].includes(data.printer.state);
 }
 

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bambu Printer Admin</title>
-    <link rel="stylesheet" href="/styles.css?v=ams-card-color-1">
+    <link rel="stylesheet" href="/styles.css?v=job-status-1">
   </head>
   <body>
     <main>
@@ -23,8 +23,10 @@
       </section>
 
       <section>
-        <h2>Next Job</h2>
-        <p id="next-job">None</p>
+        <h2>Active Job</h2>
+        <p id="active-job">No active job</p>
+        <h2>Next Queued Job</h2>
+        <p id="next-job">Queue empty</p>
         <div>
           <h3>AMS Slot</h3>
           <div id="ams-slots" class="ams-slots" role="radiogroup" aria-label="AMS Slot"></div>
@@ -47,6 +49,6 @@
       <pre id="debug-output"></pre>
     </aside>
     <button id="debug-toggle" class="debug-toggle" type="button">Debug</button>
-    <script src="/admin.js?v=ams-card-color-1"></script>
+    <script src="/admin.js?v=job-status-1"></script>
   </body>
 </html>

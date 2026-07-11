@@ -183,8 +183,10 @@ def status_response(printer_service: object | None, queue: QueueService) -> dict
         "ams_trays": ams_tray_response(raw_status),
     }
     active = queue.get_active_job()
-    if active and active.status == JobStatus.PRINTING:
+    if active:
         printer["current_job"] = job_response(active)
+        if active.status == JobStatus.STARTING and not printer["connected"]:
+            printer["state"] = "reconnecting"
     return {"printer": printer}
 
 
@@ -417,6 +419,7 @@ def create_app(
             remote_path = f"cache/{job.remote_filename}"
             job = states.change_job_state(job.id, JobStatus.UPLOADING)
             await hub.broadcast({"type": "queue.changed"})
+            await hub.broadcast({"type": "job.changed"})
             try:
                 await asyncio.to_thread(adapter.upload_file, Path(job.stored_path), remote_path, upload_wait)
                 exists = await asyncio.to_thread(adapter.file_exists, remote_path, upload_wait)
@@ -425,6 +428,7 @@ def create_app(
                     await hub.broadcast({"type": "job.changed"})
                     raise HTTPException(502, "Uploaded file was not found on printer.")
                 job = states.change_job_state(job.id, JobStatus.STARTING)
+                await hub.broadcast({"type": "job.changed"})
                 await refresh_printer_connection(printer_service)
                 await asyncio.to_thread(adapter.start_print, job.remote_filename, remote_path, ams_slot=ams_slot)
                 if not await wait_for_printing(printer_service, start_timeout):

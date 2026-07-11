@@ -64,6 +64,21 @@ class GatewayStatusTests(unittest.TestCase):
 
 
 class PrinterServiceTests(unittest.TestCase):
+    def test_start_clears_stale_connected_event(self):
+        adapter = Mock()
+        service = PrinterService(adapter)
+        service._connected_event.set()
+
+        def connect_watch(_, on_connected):
+            self.assertFalse(service._connected_event.is_set())
+            on_connected()
+
+        adapter.start_watch.side_effect = connect_watch
+
+        service.start(connect_timeout=0)
+
+        adapter.dump_info.assert_called_once()
+
     def test_status_update_records_once_for_duplicate_snapshot(self):
         adapter = Mock()
         outputs = []

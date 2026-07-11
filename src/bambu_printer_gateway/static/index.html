@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bambu Printer Queue</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css?v=job-status-1">
   </head>
   <body>
     <main>
@@ -21,7 +21,7 @@
           </div>
           <div>
             <dt>Current Job</dt>
-            <dd id="current-job">None</dd>
+            <dd id="current-job">No active job</dd>
           </div>
         </dl>
         <p id="offline-notice" class="notice" hidden>
@@ -60,6 +60,6 @@
         <p id="message" role="status"></p>
       </section>
     </main>
-    <script src="/app.js"></script>
+    <script src="/app.js?v=job-status-1"></script>
   </body>
 </html>

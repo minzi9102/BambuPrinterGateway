@@ -195,6 +195,7 @@ class PrinterService:
         self._connected_event = threading.Event()
 
     def start(self, connect_timeout: int = 30) -> None:
+        self._connected_event.clear()
         self.adapter.connect()
         self.adapter.start_watch(self.on_status, self.on_connected)
         if not self._connected_event.wait(connect_timeout):

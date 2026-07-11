@@ -1,5 +1,6 @@
 const state = document.querySelector("#printer-state");
 const connected = document.querySelector("#printer-connected");
+const activeJob = document.querySelector("#active-job");
 const nextJob = document.querySelector("#next-job");
 const message = document.querySelector("#message");
 const button = document.querySelector("#start-next");
@@ -108,16 +109,34 @@ async function refresh() {
   state.textContent = status.printer.state;
   connected.textContent = String(status.printer.connected);
   renderAmsSlots(status.printer.ams_trays || []);
+  const active = status.printer.current_job;
+  const phase = active?.status === "STARTING" && !status.printer.connected
+    ? "Reconnecting and starting"
+    : { UPLOADING: "Uploading", STARTING: "Starting", PRINTING: "Printing" }[active?.status];
+  activeJob.textContent = active
+    ? `${active.display_name} - ${active.project_name} · ${phase}`
+    : "No active job";
   nextJob.textContent = queue.jobs[0]
     ? `${queue.jobs[0].display_name} - ${queue.jobs[0].project_name}`
-    : "None";
+    : "Queue empty";
+  button.disabled = Boolean(active) || !queue.jobs[0];
+  button.textContent = active
+    ? {
+        UPLOADING: "Uploading...",
+        STARTING: status.printer.connected ? "Starting..." : "Reconnecting...",
+        PRINTING: "Printing",
+      }[active.status]
+    : queue.jobs[0] ? "Start Next Job" : "Queue Empty";
   await refreshHistory();
 }
 
 button.addEventListener("click", async () => {
   message.textContent = "Starting...";
+  button.disabled = true;
+  button.textContent = "Starting...";
   if (!ensureAuth()) {
     message.textContent = "Admin login cancelled.";
+    await refresh();
     return;
   }
   const response = await fetch("/api/admin/start-next", {
@@ -134,6 +153,7 @@ button.addEventListener("click", async () => {
   }
   const error = await response.json();
   message.textContent = error.detail || "Start failed.";
+  await refresh();
 });
 
 async function refreshDebug() {
