@@ -91,6 +91,16 @@ class AdminStartTests(unittest.TestCase):
     def start_next(self, client: TestClient, ams_slot=0):
         return client.post("/api/admin/start-next", json={"ams_slot": ams_slot}, auth=self.auth())
 
+    def cancel_job(self, client: TestClient, job_id: str):
+        return client.post(f"/api/admin/jobs/{job_id}/cancel", auth=self.auth())
+
+    def move_job(self, client: TestClient, job_id: str, direction: str):
+        return client.post(
+            f"/api/admin/jobs/{job_id}/move",
+            json={"direction": direction},
+            auth=self.auth(),
+        )
+
     def statuses(self, db_path: Path):
         conn = open_database(db_path)
         try:
@@ -119,6 +129,83 @@ class AdminStartTests(unittest.TestCase):
         adapter = FakeAdapter(printer)
         with self.make_client(printer, adapter) as (client, _):
             self.assertEqual(client.post("/api/admin/start-next").status_code, 401)
+
+    def test_queue_management_requires_auth_and_valid_direction(self):
+        with self.make_client() as (client, _):
+            job_id = self.post_job(client).json()["id"]
+
+            self.assertEqual(client.post(f"/api/admin/jobs/{job_id}/cancel").status_code, 401)
+            self.assertEqual(
+                client.post(f"/api/admin/jobs/{job_id}/move", json={"direction": "up"}).status_code,
+                401,
+            )
+            self.assertEqual(self.move_job(client, job_id, "sideways").status_code, 400)
+
+    def test_admin_moves_queued_job_before_starting(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            first = self.post_job(client, "Alice").json()["id"]
+            second = self.post_job(client, "Bob").json()["id"]
+
+            moved = self.move_job(client, second, "up")
+
+            self.assertEqual(moved.status_code, 200)
+            self.assertEqual(moved.json()["job"]["id"], second)
+            self.assertEqual(moved.json()["position"], 1)
+            self.assertEqual(
+                [job["id"] for job in client.get("/api/queue").json()["jobs"]],
+                [second, first],
+            )
+            started = self.start_next(client)
+            self.assertEqual(started.status_code, 200)
+            self.assertEqual(started.json()["job"]["id"], second)
+
+    def test_admin_cancels_queued_job_and_keeps_history_and_file(self):
+        with self.make_client() as (client, root):
+            first = self.post_job(client, "Alice").json()["id"]
+            second = self.post_job(client, "Bob").json()["id"]
+            conn = open_database(root / "queue.db")
+            try:
+                stored_path = Path(conn.execute("SELECT stored_path FROM jobs WHERE id = ?", (first,)).fetchone()[0])
+            finally:
+                conn.close()
+
+            cancelled = self.cancel_job(client, first)
+
+            self.assertEqual(cancelled.status_code, 200)
+            self.assertEqual(cancelled.json()["job"]["status"], "CANCELLED")
+            self.assertEqual(client.get("/api/queue").json()["jobs"], [
+                {"position": 1, "id": second, "display_name": "Bob", "project_name": "Bob Project", "status": "QUEUED"}
+            ])
+            history = client.get("/api/admin/history", auth=self.auth()).json()["jobs"]
+            self.assertEqual(history[0]["id"], first)
+            self.assertEqual(history[0]["status"], "CANCELLED")
+            self.assertTrue(stored_path.exists())
+
+    def test_queue_management_rejects_unavailable_jobs(self):
+        with self.make_client() as (client, root):
+            job_id = self.post_job(client).json()["id"]
+
+            self.assertEqual(self.move_job(client, job_id, "up").status_code, 409)
+            self.assertEqual(self.cancel_job(client, "missing").status_code, 409)
+            self.set_job_status(root / "queue.db", job_id, JobStatus.STARTING)
+            self.assertEqual(self.cancel_job(client, job_id).status_code, 409)
+
+    def test_queue_management_broadcasts_changes(self):
+        with self.make_client() as (client, _):
+            first = self.post_job(client, "Alice").json()["id"]
+            second = self.post_job(client, "Bob").json()["id"]
+            with client.websocket_connect("/ws") as websocket:
+                moved = self.move_job(client, second, "up")
+                move_event = websocket.receive_json()
+                cancelled = self.cancel_job(client, first)
+                cancel_events = [websocket.receive_json() for _ in range(2)]
+
+            self.assertEqual(moved.status_code, 200)
+            self.assertEqual(move_event, {"type": "queue.changed"})
+            self.assertEqual(cancelled.status_code, 200)
+            self.assertEqual(cancel_events, [{"type": "queue.changed"}, {"type": "job.changed"}])
 
     def test_empty_queue_returns_404(self):
         printer = FakePrinter()

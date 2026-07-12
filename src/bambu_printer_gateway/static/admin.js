@@ -2,6 +2,7 @@ const state = document.querySelector("#printer-state");
 const connected = document.querySelector("#printer-connected");
 const activeJob = document.querySelector("#active-job");
 const nextJob = document.querySelector("#next-job");
+const adminQueue = document.querySelector("#admin-queue");
 const message = document.querySelector("#message");
 const button = document.querySelector("#start-next");
 const amsSlots = document.querySelector("#ams-slots");
@@ -99,6 +100,70 @@ function renderAmsSlots(trays) {
   );
 }
 
+async function manageQueue(job, action, body) {
+  if (!ensureAuth()) {
+    message.textContent = "Admin login cancelled.";
+    return;
+  }
+  message.textContent = action === "move" ? "Updating queue..." : "Removing job...";
+  const headers = { Authorization: authHeader };
+  if (body) headers["Content-Type"] = "application/json";
+  const response = await fetch(`/api/admin/jobs/${encodeURIComponent(job.id)}/${action}`, {
+    method: "POST",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (response.status === 401) authHeader = null;
+  if (response.ok) {
+    message.textContent = action === "move" ? "Queue order updated." : "Job removed from queue.";
+  } else {
+    const error = await response.json();
+    message.textContent = error.detail || "Queue update failed.";
+  }
+  await refresh();
+}
+
+function renderQueue(jobs) {
+  adminQueue.replaceChildren(
+    ...jobs.map((job, index) => {
+      const item = document.createElement("li");
+      const row = document.createElement("div");
+      const details = document.createElement("span");
+      const actions = document.createElement("span");
+      const up = document.createElement("button");
+      const down = document.createElement("button");
+      const remove = document.createElement("button");
+      row.className = "admin-queue-row";
+      details.className = "admin-queue-details";
+      actions.className = "admin-queue-actions";
+      details.textContent = `${job.display_name} - ${job.project_name}`;
+      up.type = "button";
+      up.textContent = "Move up";
+      up.disabled = index === 0;
+      up.setAttribute("aria-label", `Move ${job.project_name} up`);
+      up.addEventListener("click", () => manageQueue(job, "move", { direction: "up" }));
+      down.type = "button";
+      down.textContent = "Move down";
+      down.disabled = index === jobs.length - 1;
+      down.setAttribute("aria-label", `Move ${job.project_name} down`);
+      down.addEventListener("click", () => manageQueue(job, "move", { direction: "down" }));
+      remove.type = "button";
+      remove.className = "admin-queue-remove";
+      remove.textContent = "Remove";
+      remove.setAttribute("aria-label", `Remove ${job.project_name} from queue`);
+      remove.addEventListener("click", () => {
+        if (window.confirm(`Remove ${job.display_name} - ${job.project_name} from the queue?`)) {
+          manageQueue(job, "cancel");
+        }
+      });
+      actions.append(up, down, remove);
+      row.append(details, actions);
+      item.append(row);
+      return item;
+    }),
+  );
+}
+
 async function refresh() {
   const [statusResponse, queueResponse] = await Promise.all([
     fetch("/api/status"),
@@ -119,6 +184,7 @@ async function refresh() {
   nextJob.textContent = queue.jobs[0]
     ? `${queue.jobs[0].display_name} - ${queue.jobs[0].project_name}`
     : "Queue empty";
+  renderQueue(queue.jobs);
   button.disabled = Boolean(active) || !queue.jobs[0];
   button.textContent = active
     ? {

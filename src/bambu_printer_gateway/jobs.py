@@ -179,14 +179,69 @@ class QueueService:
         return [row_to_job(row) for row in rows]
 
     def cancel_job(self, job_id: str) -> Job:
+        with self.conn:
+            cursor = self.conn.execute(
+                """
+                UPDATE jobs
+                SET status = ?, finished_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (JobStatus.CANCELLED.value, now(), job_id, JobStatus.QUEUED.value),
+            )
+            if cursor.rowcount != 1:
+                raise QueueError(f"only queued jobs can be cancelled: {job_id}")
+        return self._get_job(job_id)
+
+    def move_job(self, job_id: str, direction: str) -> Job:
+        if direction not in {"up", "down"}:
+            raise QueueError(f"unknown queue direction: {direction}")
         job = self._get_job(job_id)
         if job.status != JobStatus.QUEUED:
-            raise QueueError(f"only queued jobs can be cancelled: {job_id}")
+            raise QueueError(f"only queued jobs can be moved: {job_id}")
+
+        comparison, order = ("<", "DESC") if direction == "up" else (">", "ASC")
+        neighbor = self.conn.execute(
+            f"""
+            SELECT *
+            FROM jobs
+            WHERE status = ? AND queue_sequence {comparison} ?
+            ORDER BY queue_sequence {order}
+            LIMIT 1
+            """,
+            (JobStatus.QUEUED.value, job.queue_sequence),
+        ).fetchone()
+        if not neighbor:
+            raise QueueError(f"job is already at the {direction} boundary: {job_id}")
+
+        neighbor_job = row_to_job(neighbor)
         with self.conn:
-            self.conn.execute(
-                "UPDATE jobs SET status = ?, finished_at = ? WHERE id = ?",
-                (JobStatus.CANCELLED.value, now(), job_id),
+            cursor = self.conn.execute(
+                """
+                UPDATE jobs
+                SET queue_sequence = CASE id
+                    WHEN ? THEN ?
+                    WHEN ? THEN ?
+                END
+                WHERE status = ?
+                  AND (
+                    (id = ? AND queue_sequence = ?)
+                    OR (id = ? AND queue_sequence = ?)
+                  )
+                """,
+                (
+                    job.id,
+                    neighbor_job.queue_sequence,
+                    neighbor_job.id,
+                    job.queue_sequence,
+                    JobStatus.QUEUED.value,
+                    job.id,
+                    job.queue_sequence,
+                    neighbor_job.id,
+                    neighbor_job.queue_sequence,
+                ),
             )
+            if cursor.rowcount != 2:
+                raise QueueError("queue changed while moving job; refresh and try again")
         return self._get_job(job_id)
 
     def _get_job(self, job_id: str) -> Job:

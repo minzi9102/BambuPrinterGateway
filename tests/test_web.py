@@ -203,14 +203,21 @@ class WebTests(unittest.TestCase):
         public_script = (static_dir / "app.js").read_text(encoding="utf-8")
         admin_html = (static_dir / "admin.html").read_text(encoding="utf-8")
         admin_script = (static_dir / "admin.js").read_text(encoding="utf-8")
+        styles = (static_dir / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("app.js?v=job-status-1", public_html)
         self.assertIn("Reconnecting and starting", public_script)
         self.assertIn('id="active-job"', admin_html)
         self.assertIn("Next Queued Job", admin_html)
-        self.assertIn("admin.js?v=job-status-1", admin_html)
+        self.assertIn('id="admin-queue"', admin_html)
+        self.assertIn("admin.js?v=queue-management-1", admin_html)
         self.assertIn('button.textContent = active', admin_script)
         self.assertIn('button.disabled = Boolean(active) || !queue.jobs[0]', admin_script)
+        self.assertIn("renderQueue(queue.jobs)", admin_script)
+        self.assertIn('/api/admin/jobs/${encodeURIComponent(job.id)}/${action}', admin_script)
+        self.assertIn("window.confirm", admin_script)
+        self.assertIn("up.disabled = index === 0", admin_script)
+        self.assertIn(".admin-queue-actions button", styles)
 
 
 if __name__ == "__main__":

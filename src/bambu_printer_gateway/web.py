@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .database import open_database
 from .gateway import BambuAdapter, PrinterService
-from .jobs import Job, JobStateService, JobStatus, QueueService, now
+from .jobs import Job, JobStateService, JobStatus, QueueError, QueueService, now
 from .phase0 import Phase0Error, PrinterConfig, validate_print_file
 
 CHUNK_SIZE = 1024 * 1024
@@ -142,6 +142,13 @@ def ams_slot_from_body(body: dict[str, Any] | None) -> int:
     if isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot <= 3:
         raise HTTPException(400, "ams_slot must be an integer from 0 to 3.")
     return slot
+
+
+def move_direction_from_body(body: dict[str, Any] | None) -> str:
+    direction = (body or {}).get("direction")
+    if direction not in {"up", "down"}:
+        raise HTTPException(400, 'direction must be "up" or "down".')
+    return direction
 
 
 def current_task(raw_status: dict[str, Any]) -> Any:
@@ -447,6 +454,30 @@ def create_app(
             await hub.broadcast({"type": "job.changed"})
             await hub.broadcast({"type": "queue.changed"})
             return {"job": job_response(job)}
+
+    @app.post("/api/admin/jobs/{job_id}/cancel")
+    async def cancel_queued_job(job_id: str, _: None = Depends(require_admin)):
+        try:
+            job = queue.cancel_job(job_id)
+        except QueueError as error:
+            raise HTTPException(409, str(error)) from error
+        await hub.broadcast({"type": "queue.changed"})
+        await hub.broadcast({"type": "job.changed"})
+        return {"job": job_response(job)}
+
+    @app.post("/api/admin/jobs/{job_id}/move")
+    async def move_queued_job(
+        job_id: str,
+        body: dict[str, Any] | None = Body(default=None),
+        _: None = Depends(require_admin),
+    ):
+        try:
+            job = queue.move_job(job_id, move_direction_from_body(body))
+        except QueueError as error:
+            raise HTTPException(409, str(error)) from error
+        position = next(index for index, item in enumerate(queue.get_queue(), start=1) if item.id == job.id)
+        await hub.broadcast({"type": "queue.changed"})
+        return {"job": job_response(job), "position": position}
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):

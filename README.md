@@ -1,7 +1,7 @@
 # Bambu Printer Gateway
 
 面向单台 Bambu Lab 打印机的局域网打印队列。系统由 FastAPI、Vanilla JS 和 SQLite
-组成：用户在公共页面上传已切片的 `.gcode.3mf`，管理员选择 AMS 槽位并手动启动队首任务，
+组成：用户在公共页面上传已切片的 `.gcode.3mf`，管理员可管理等待队列、选择 AMS 槽位并手动启动队首任务，
 页面通过 WebSocket 和定时轮询同步打印机、队列、活动任务及最近 100 条历史记录。
 
 ## 当前能力
@@ -9,14 +9,14 @@
 - SQLite FIFO 队列与上传文件持久化。
 - 校验 `.gcode.3mf`/ZIP 完整性及 `Metadata/plate_1.gcode`。
 - 打印机 MQTT 状态、进度、剩余时间、层数和 AMS 槽位展示。
-- 管理员 Basic Auth、AMS 槽位选择和队首启动。
+- 管理员 Basic Auth、等待任务上移/下移、移出队列、AMS 槽位选择和队首启动。
 - 启动前刷新 MQTT 连接，确认远程文件存在，并等待打印机进入 `RUNNING`。
 - 明确显示 Active Job、Next Queued Job 及上传、重连、启动、打印阶段。
 - 自动对账打印完成/失败状态；服务重启后保留队列和正在打印的任务。
 - 公共历史隐藏内部错误，管理员历史显示失败原因。
 - 独立的真实硬件 Gate 和长期 Gateway 状态监控命令。
 
-当前边界：单打印机、无用户账户、无任务取消 API、管理员不能调整队列顺序；启动文件固定使用
+当前边界：单打印机、无用户账户；仅管理员可管理 `QUEUED` 任务，启动文件固定使用
 `Metadata/plate_1.gcode`，其他 plate 路径不受支持。
 
 ## 环境要求
@@ -129,6 +129,8 @@ QUEUED -> CANCELLED
 | `GET` | `/api/admin/history` | Basic Auth | 最近 100 条终态任务及 `error_message` |
 | `GET` | `/api/admin/debug` | Basic Auth | 运行时、打印机原始字段、AMS 和队列诊断信息 |
 | `POST` | `/api/admin/start-next` | Basic Auth | 启动队首任务，JSON 为 `{"ams_slot": 0}`，有效值 `0..3` |
+| `POST` | `/api/admin/jobs/{job_id}/move` | Basic Auth | 将等待任务上移或下移一位，JSON 为 `{"direction":"up"}` 或 `{"direction":"down"}` |
+| `POST` | `/api/admin/jobs/{job_id}/cancel` | Basic Auth | 将等待任务标为 `CANCELLED`，保留历史和上传文件 |
 | WebSocket | `/ws` | 无 | 推送 `queue.changed` 和 `job.changed`，客户端收到后重新拉取状态 |
 
 上传接口字段：

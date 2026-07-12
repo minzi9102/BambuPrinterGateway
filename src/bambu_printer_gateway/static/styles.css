@@ -101,6 +101,35 @@ button:disabled {
   min-height: 24px;
 }
 
+.admin-queue-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-queue-details {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-queue-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-queue-actions button {
+  width: auto;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.admin-queue-remove {
+  background: #b91c1c;
+}
+
 .notice {
   display: grid;
   gap: 4px;

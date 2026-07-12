@@ -45,6 +45,36 @@ class QueueTests(unittest.TestCase):
             self.assertEqual([job.id for job in queue.get_queue()], [first.id, third.id])
             conn.close()
 
+    def test_move_middle_job_up_and_down(self):
+        with tempfile.TemporaryDirectory() as directory:
+            conn, queue, _ = self.open_queue(Path(directory, "queue.db"))
+            first = self.create_job(queue, "alice")
+            second = self.create_job(queue, "bob")
+            third = self.create_job(queue, "charlie")
+
+            moved = queue.move_job(second.id, "up")
+
+            self.assertEqual(moved.id, second.id)
+            self.assertEqual([job.id for job in queue.get_queue()], [second.id, first.id, third.id])
+            queue.move_job(second.id, "down")
+            self.assertEqual([job.id for job in queue.get_queue()], [first.id, second.id, third.id])
+            conn.close()
+
+    def test_moved_queue_survives_reopen(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "queue.db")
+            conn, queue, _ = self.open_queue(path)
+            first = self.create_job(queue, "alice")
+            second = self.create_job(queue, "bob")
+            third = self.create_job(queue, "charlie")
+            queue.move_job(third.id, "up")
+            conn.close()
+
+            conn, queue, _ = self.open_queue(path)
+
+            self.assertEqual([job.id for job in queue.get_queue()], [first.id, third.id, second.id])
+            conn.close()
+
     def test_history_returns_latest_100_terminal_jobs(self):
         with tempfile.TemporaryDirectory() as directory:
             conn, queue, _ = self.open_queue(Path(directory, "queue.db"))
@@ -121,6 +151,24 @@ class QueueTests(unittest.TestCase):
 
             with self.assertRaises(QueueError):
                 queue.cancel_job(job.id)
+
+            conn.close()
+
+    def test_move_rejects_invalid_direction_boundaries_and_non_queued_jobs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            conn, queue, states = self.open_queue(Path(directory, "queue.db"))
+            first = self.create_job(queue, "alice")
+            second = self.create_job(queue, "bob")
+
+            with self.assertRaises(QueueError):
+                queue.move_job(first.id, "up")
+            with self.assertRaises(QueueError):
+                queue.move_job(second.id, "down")
+            with self.assertRaises(QueueError):
+                queue.move_job(first.id, "sideways")
+            states.change_job_state(first.id, JobStatus.UPLOADING)
+            with self.assertRaises(QueueError):
+                queue.move_job(first.id, "down")
 
             conn.close()
 
