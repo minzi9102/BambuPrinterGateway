@@ -357,10 +357,22 @@ class AdminStartTests(unittest.TestCase):
                 ],
             )
 
-    def test_status_includes_ams_trays(self):
+    def test_status_includes_telemetry_and_ams_trays(self):
         printer = FakePrinter()
         printer.raw_status = {
             "gcode_state": "RUNNING",
+            "nozzle_temper": 220,
+            "nozzle_target_temper": 225,
+            "bed_temper": 60,
+            "bed_target_temper": 65,
+            "chamber_temper": 35,
+            "cooling_fan_speed": 0,
+            "heatbreak_fan_speed": 100,
+            "big_fan1_speed": 80,
+            "big_fan2_speed": 0,
+            "wifi_signal": "-52dBm",
+            "print_error": 123,
+            "hms": [{"code": 1}],
             "ams": {
                 "ams": [
                     {
@@ -384,6 +396,20 @@ class AdminStartTests(unittest.TestCase):
             tray = printer_status["ams_trays"][0]
 
             self.assertEqual(printer_status["raw_state"], "RUNNING")
+            self.assertEqual(
+                printer_status["telemetry"],
+                {
+                    "temperatures": {
+                        "nozzle": {"current": 220, "target": 225},
+                        "bed": {"current": 60, "target": 65},
+                        "chamber": 35,
+                    },
+                    "fans": {"cooling": 0, "heatbreak": 100, "auxiliary_1": 80, "auxiliary_2": 0},
+                    "wifi_signal": "-52dBm",
+                },
+            )
+            self.assertNotIn("print_error", printer_status)
+            self.assertNotIn("hms", printer_status)
             self.assertEqual(tray["slot"], 0)
             self.assertEqual(tray["label"], "AMS Slot 1 - PLA Lite - A18-B1 - 83%")
 

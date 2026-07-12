@@ -103,7 +103,28 @@ class WebTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(
                 response.json(),
-                {"printer": {"connected": False, "state": "unknown", "raw_state": None, "ams_trays": []}},
+                {
+                    "printer": {
+                        "connected": False,
+                        "state": "unknown",
+                        "raw_state": None,
+                        "ams_trays": [],
+                        "telemetry": {
+                            "temperatures": {
+                                "nozzle": {"current": None, "target": None},
+                                "bed": {"current": None, "target": None},
+                                "chamber": None,
+                            },
+                            "fans": {
+                                "cooling": None,
+                                "heatbreak": None,
+                                "auxiliary_1": None,
+                                "auxiliary_2": None,
+                            },
+                            "wifi_signal": None,
+                        },
+                    }
+                },
             )
 
     def test_startup_marks_interrupted_startup_jobs_failed(self):
@@ -197,6 +218,20 @@ class WebTests(unittest.TestCase):
             self.assertIn('id="history"', (static_dir / page).read_text(encoding="utf-8"))
             self.assertIn("refreshHistory", (static_dir / script).read_text(encoding="utf-8"))
 
+    def test_pages_include_printer_telemetry(self):
+        static_dir = Path(__file__).resolve().parents[1] / "src" / "bambu_printer_gateway" / "static"
+
+        for page, script in (("index.html", "app.js"), ("admin.html", "admin.js")):
+            html = (static_dir / page).read_text(encoding="utf-8")
+            source = (static_dir / script).read_text(encoding="utf-8")
+            self.assertIn('id="printer-progress"', html)
+            self.assertIn('id="printer-nozzle"', html)
+            self.assertIn('id="printer-auxiliary-fan-2"', html)
+            self.assertIn("renderTelemetry", source)
+
+        self.assertIn('id="ams-status"', (static_dir / "index.html").read_text(encoding="utf-8"))
+        self.assertIn("renderAmsStatus", (static_dir / "app.js").read_text(encoding="utf-8"))
+
     def test_pages_show_active_and_queued_job_states(self):
         static_dir = Path(__file__).resolve().parents[1] / "src" / "bambu_printer_gateway" / "static"
         public_html = (static_dir / "index.html").read_text(encoding="utf-8")
@@ -205,12 +240,12 @@ class WebTests(unittest.TestCase):
         admin_script = (static_dir / "admin.js").read_text(encoding="utf-8")
         styles = (static_dir / "styles.css").read_text(encoding="utf-8")
 
-        self.assertIn("app.js?v=job-status-1", public_html)
+        self.assertIn("app.js?v=printer-status-2", public_html)
         self.assertIn("Reconnecting and starting", public_script)
         self.assertIn('id="active-job"', admin_html)
         self.assertIn("Next Queued Job", admin_html)
         self.assertIn('id="admin-queue"', admin_html)
-        self.assertIn("admin.js?v=queue-management-1", admin_html)
+        self.assertIn("admin.js?v=printer-status-2", admin_html)
         self.assertIn('button.textContent = active', admin_script)
         self.assertIn('button.disabled = Boolean(active) || !queue.jobs[0]', admin_script)
         self.assertIn("renderQueue(queue.jobs)", admin_script)

@@ -144,14 +144,16 @@ button:disabled {
   display: none;
 }
 
-.ams-slots {
+.ams-slots,
+.ams-status {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }
 
-.ams-slot-card {
+.ams-slot-card,
+.ams-status-card {
   display: flex;
   min-height: 78px;
   gap: 10px;
@@ -194,13 +196,15 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
-  .ams-slots {
+  .ams-slots,
+  .ams-status {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 480px) {
-  .ams-slots {
+  .ams-slots,
+  .ams-status {
     grid-template-columns: 1fr;
   }
 }

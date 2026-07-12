@@ -15,6 +15,36 @@ const debugOutput = document.querySelector("#debug-output");
 let authHeader = null;
 let selectedAmsSlot = 0;
 
+function present(value, unit = "") {
+  return value === null || value === undefined || value === "" ? "—" : `${value}${unit}`;
+}
+
+function pair(current, target, unit) {
+  if ([current, target].every((value) => value === null || value === undefined || value === "")) return "—";
+  return `${present(current, unit)} / ${present(target, unit)}`;
+}
+
+function renderTelemetry(printer) {
+  const telemetry = printer.telemetry || {};
+  const temperatures = telemetry.temperatures || {};
+  const fans = telemetry.fans || {};
+  const values = {
+    "printer-task": present(printer.current_task),
+    "printer-progress": present(printer.progress, "%"),
+    "printer-remaining": present(printer.remaining_minutes, " min"),
+    "printer-layer": pair(printer.layer, printer.total_layers, ""),
+    "printer-nozzle": pair(temperatures.nozzle?.current, temperatures.nozzle?.target, " °C"),
+    "printer-bed": pair(temperatures.bed?.current, temperatures.bed?.target, " °C"),
+    "printer-chamber": present(temperatures.chamber, " °C"),
+    "printer-cooling-fan": present(fans.cooling),
+    "printer-heatbreak-fan": present(fans.heatbreak),
+    "printer-auxiliary-fan-1": present(fans.auxiliary_1),
+    "printer-auxiliary-fan-2": present(fans.auxiliary_2),
+    "printer-wifi": present(telemetry.wifi_signal),
+  };
+  for (const [id, value] of Object.entries(values)) document.querySelector(`#${id}`).textContent = value;
+}
+
 function ensureAuth() {
   if (!authHeader) {
     const username = prompt("Admin username");
@@ -173,6 +203,7 @@ async function refresh() {
   const queue = await queueResponse.json();
   state.textContent = status.printer.state;
   connected.textContent = String(status.printer.connected);
+  renderTelemetry(status.printer);
   renderAmsSlots(status.printer.ams_trays || []);
   const active = status.printer.current_job;
   const phase = active?.status === "STARTING" && !status.printer.connected

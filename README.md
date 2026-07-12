@@ -8,7 +8,7 @@
 
 - SQLite FIFO 队列与上传文件持久化。
 - 校验 `.gcode.3mf`/ZIP 完整性及 `Metadata/plate_1.gcode`。
-- 打印机 MQTT 状态、进度、剩余时间、层数和 AMS 槽位展示。
+- 公共页和管理页展示 MQTT 打印状态、任务、进度、剩余时间、层数、温度、风扇、Wi-Fi 和 AMS 槽位。
 - MQTT 连接失败每 30 秒重试；运行中断线由 MQTT keepalive 自动以 30 秒间隔重连。
 - 管理员 Basic Auth、等待任务上移/下移、移出队列、AMS 槽位选择和队首启动。
 - 启动前刷新 MQTT 连接，确认远程文件存在，并等待打印机进入 `RUNNING`。
@@ -124,7 +124,7 @@ MQTT 重连成功但尚未收到新状态时显示 `unknown`。
 
 | 方法 | 路径 | 认证 | 说明 |
 | --- | --- | --- | --- |
-| `GET` | `/api/status` | 无 | 打印机、Active Job、进度和 AMS 状态 |
+| `GET` | `/api/status` | 无 | 打印机、Active Job、进度、温度、风扇、Wi-Fi 和 AMS 状态 |
 | `GET` | `/api/queue` | 无 | 当前 `QUEUED` 任务和 FIFO 位置 |
 | `GET` | `/api/history` | 无 | 最近 100 条终态任务，不返回错误详情 |
 | `POST` | `/api/jobs` | 无 | `multipart/form-data` 上传任务 |

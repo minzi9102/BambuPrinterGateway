@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bambu Printer Queue</title>
-    <link rel="stylesheet" href="/styles.css?v=job-status-1">
+    <link rel="stylesheet" href="/styles.css?v=printer-status-2">
   </head>
   <body>
     <main>
@@ -28,6 +28,62 @@
           <strong>PRINTER OFFLINE</strong>
           <span>Printing is temporarily unavailable. Existing queue has been preserved.</span>
         </p>
+      </section>
+
+      <section>
+        <h2>Printer Telemetry</h2>
+        <dl>
+          <div>
+            <dt>Current Task</dt>
+            <dd id="printer-task">—</dd>
+          </div>
+          <div>
+            <dt>Progress</dt>
+            <dd id="printer-progress">—</dd>
+          </div>
+          <div>
+            <dt>Remaining</dt>
+            <dd id="printer-remaining">—</dd>
+          </div>
+          <div>
+            <dt>Layer</dt>
+            <dd id="printer-layer">—</dd>
+          </div>
+          <div>
+            <dt>Nozzle</dt>
+            <dd id="printer-nozzle">—</dd>
+          </div>
+          <div>
+            <dt>Bed</dt>
+            <dd id="printer-bed">—</dd>
+          </div>
+          <div>
+            <dt>Chamber</dt>
+            <dd id="printer-chamber">—</dd>
+          </div>
+          <div>
+            <dt>Cooling Fan</dt>
+            <dd id="printer-cooling-fan">—</dd>
+          </div>
+          <div>
+            <dt>Heatbreak Fan</dt>
+            <dd id="printer-heatbreak-fan">—</dd>
+          </div>
+          <div>
+            <dt>Auxiliary Fan 1</dt>
+            <dd id="printer-auxiliary-fan-1">—</dd>
+          </div>
+          <div>
+            <dt>Auxiliary Fan 2</dt>
+            <dd id="printer-auxiliary-fan-2">—</dd>
+          </div>
+          <div>
+            <dt>Wi-Fi</dt>
+            <dd id="printer-wifi">—</dd>
+          </div>
+        </dl>
+        <h3>AMS Materials</h3>
+        <div id="ams-status" class="ams-status"></div>
       </section>
 
       <section>
@@ -60,6 +116,6 @@
         <ol id="history"></ol>
       </section>
     </main>
-    <script src="/app.js?v=job-status-1"></script>
+    <script src="/app.js?v=printer-status-2"></script>
   </body>
 </html>

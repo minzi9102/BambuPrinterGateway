@@ -155,6 +155,29 @@ def current_task(raw_status: dict[str, Any]) -> Any:
     return raw_status.get("subtask_name") or raw_status.get("gcode_file")
 
 
+def telemetry_response(raw_status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "temperatures": {
+            "nozzle": {
+                "current": raw_status.get("nozzle_temper"),
+                "target": raw_status.get("nozzle_target_temper"),
+            },
+            "bed": {
+                "current": raw_status.get("bed_temper"),
+                "target": raw_status.get("bed_target_temper"),
+            },
+            "chamber": raw_status.get("chamber_temper"),
+        },
+        "fans": {
+            "cooling": raw_status.get("cooling_fan_speed"),
+            "heatbreak": raw_status.get("heatbreak_fan_speed"),
+            "auxiliary_1": raw_status.get("big_fan1_speed"),
+            "auxiliary_2": raw_status.get("big_fan2_speed"),
+        },
+        "wifi_signal": raw_status.get("wifi_signal"),
+    }
+
+
 def fail_interrupted_startup_jobs(conn: sqlite3.Connection) -> None:
     with conn:
         conn.execute(
@@ -175,7 +198,15 @@ def fail_interrupted_startup_jobs(conn: sqlite3.Connection) -> None:
 
 def status_response(printer_service: object | None, queue: QueueService) -> dict[str, Any]:
     if not printer_service:
-        return {"printer": {"connected": False, "state": "unknown", "raw_state": None, "ams_trays": []}}
+        return {
+            "printer": {
+                "connected": False,
+                "state": "unknown",
+                "raw_state": None,
+                "ams_trays": [],
+                "telemetry": telemetry_response({}),
+            }
+        }
     raw_status = getattr(printer_service, "raw_status", None) or {}
     printer = {
         "connected": bool(getattr(printer_service, "connected", False)),
@@ -188,6 +219,7 @@ def status_response(printer_service: object | None, queue: QueueService) -> dict
         "total_layers": raw_status.get("total_layer_num"),
         "current_job": None,
         "ams_trays": ams_tray_response(raw_status),
+        "telemetry": telemetry_response(raw_status),
     }
     active = queue.get_active_job()
     if active:
