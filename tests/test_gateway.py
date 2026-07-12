@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from bambu_printer_gateway.gateway import (
     BambuAdapter,
+    MQTT_RECONNECT_SECONDS,
     PrinterService,
     format_status,
     main,
@@ -69,7 +70,7 @@ class PrinterServiceTests(unittest.TestCase):
         service = PrinterService(adapter)
         service._connected_event.set()
 
-        def connect_watch(_, on_connected):
+        def connect_watch(_, on_connected, _on_disconnected):
             self.assertFalse(service._connected_event.is_set())
             on_connected()
 
@@ -122,8 +123,41 @@ class PrinterServiceTests(unittest.TestCase):
         self.assertFalse(service.connected)
         self.assertEqual(service.normalized_state, "offline")
 
+    def test_connection_callbacks_update_service_state(self):
+        service = PrinterService(Mock())
+
+        service.on_connected()
+
+        self.assertTrue(service.connected)
+        self.assertEqual(service.normalized_state, "unknown")
+        self.assertTrue(service._connected_event.is_set())
+        service.on_disconnected()
+        self.assertFalse(service.connected)
+        self.assertEqual(service.normalized_state, "offline")
+        self.assertFalse(service._connected_event.is_set())
+
 
 class BambuAdapterTests(unittest.TestCase):
+    def test_watch_uses_fixed_reconnect_delay_and_connection_callbacks(self):
+        adapter = BambuAdapter(PrinterConfig("host", "secret", "serial"))
+        client = Mock()
+        mqtt_client = client.watchClient.client
+        watch_on_connect = Mock()
+        mqtt_client.on_connect = watch_on_connect
+        connected = Mock()
+        disconnected = Mock()
+        adapter.client = client
+
+        adapter.start_watch(Mock(), connected, disconnected)
+
+        mqtt_client.reconnect_delay_set.assert_called_once_with(MQTT_RECONNECT_SECONDS, MQTT_RECONNECT_SECONDS)
+        mqtt_client.on_connect(mqtt_client, None, None, 1)
+        watch_on_connect.assert_not_called()
+        mqtt_client.on_connect(mqtt_client, None, None, 0)
+        watch_on_connect.assert_called_once_with(mqtt_client, None, None, 0)
+        mqtt_client.on_disconnect(mqtt_client, None, 1)
+        disconnected.assert_called_once()
+
     def test_disconnect_stops_watch_and_execute_client(self):
         adapter = BambuAdapter(PrinterConfig("host", "secret", "serial"))
         client = Mock()

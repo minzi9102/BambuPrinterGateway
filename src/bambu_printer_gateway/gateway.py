@@ -81,6 +81,7 @@ STATE_MAP = {
     "PREPARE": "starting",
     "RUNNING": "printing",
 }
+MQTT_RECONNECT_SECONDS = 30
 
 
 def now() -> str:
@@ -140,9 +141,21 @@ class BambuAdapter:
         self,
         message_callback: Callable[[object], None],
         on_connect_callback: Callable[[], None],
+        on_disconnect_callback: Callable[[], None],
     ) -> None:
         if not self.client:
             raise Phase0Error("打印机客户端尚未连接")
+        mqtt_client = self.client.watchClient.client
+        watch_on_connect = mqtt_client.on_connect
+
+        def on_connect(client: object, userdata: object, flags: object, rc: int) -> None:
+            if rc == 0 and watch_on_connect:
+                watch_on_connect(client, userdata, flags, rc)
+
+        # ponytail: rely on MQTT keepalive; idle printers may not publish status updates.
+        mqtt_client.reconnect_delay_set(MQTT_RECONNECT_SECONDS, MQTT_RECONNECT_SECONDS)
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_disconnect = lambda *_: on_disconnect_callback()
         self.client.start_watch_client(message_callback, on_connect_callback)
         self._watching = True
 
@@ -197,7 +210,7 @@ class PrinterService:
     def start(self, connect_timeout: int = 30) -> None:
         self._connected_event.clear()
         self.adapter.connect()
-        self.adapter.start_watch(self.on_status, self.on_connected)
+        self.adapter.start_watch(self.on_status, self.on_connected, self.on_disconnected)
         if not self._connected_event.wait(connect_timeout):
             raise Phase0Error("MQTT 连接超时")
         self.adapter.dump_info()
@@ -207,10 +220,17 @@ class PrinterService:
         self.adapter.disconnect()
         self.connected = False
         self.normalized_state = "offline"
+        self._connected_event.clear()
 
     def on_connected(self) -> None:
         self.connected = True
+        self.normalized_state = "unknown"
         self._connected_event.set()
+
+    def on_disconnected(self) -> None:
+        self.connected = False
+        self.normalized_state = "offline"
+        self._connected_event.clear()
 
     def on_status(self, status: object) -> None:
         snapshot = status_snapshot(status)

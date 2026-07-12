@@ -1,9 +1,11 @@
 import io
 import tempfile
+import time
 import unittest
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -35,6 +37,19 @@ class FakePrinter:
     def stop(self):
         self.stops += 1
         self.connected = False
+
+
+class RetryPrinter(FakePrinter):
+    def __init__(self, failures: int):
+        super().__init__(connected=False, state="offline")
+        self.failures = failures
+
+    def start(self):
+        self.starts += 1
+        if self.starts <= self.failures:
+            raise RuntimeError("printer unavailable")
+        self.connected = True
+        self.normalized_state = "idle"
 
 
 class FakeAdapter:
@@ -129,6 +144,28 @@ class AdminStartTests(unittest.TestCase):
         adapter = FakeAdapter(printer)
         with self.make_client(printer, adapter) as (client, _):
             self.assertEqual(client.post("/api/admin/start-next").status_code, 401)
+
+    @patch("bambu_printer_gateway.web.MQTT_RECONNECT_SECONDS", 0.01)
+    def test_startup_retries_printer_connection(self):
+        printer = RetryPrinter(failures=1)
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline and not client.get("/api/status").json()["printer"]["connected"]:
+                time.sleep(0.01)
+
+            self.assertTrue(client.get("/api/status").json()["printer"]["connected"])
+            self.assertEqual(printer.starts, 2)
+
+    @patch("bambu_printer_gateway.web.MQTT_RECONNECT_SECONDS", 60)
+    def test_shutdown_cancels_pending_printer_retry(self):
+        printer = RetryPrinter(failures=10)
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.assertFalse(client.get("/api/status").json()["printer"]["connected"])
+            self.assertEqual(printer.starts, 1)
+
+        self.assertEqual(printer.stops, 2)
 
     def test_queue_management_requires_auth_and_valid_direction(self):
         with self.make_client() as (client, _):

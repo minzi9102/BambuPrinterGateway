@@ -9,6 +9,7 @@
 - SQLite FIFO 队列与上传文件持久化。
 - 校验 `.gcode.3mf`/ZIP 完整性及 `Metadata/plate_1.gcode`。
 - 打印机 MQTT 状态、进度、剩余时间、层数和 AMS 槽位展示。
+- MQTT 连接失败每 30 秒重试；运行中断线由 MQTT keepalive 自动以 30 秒间隔重连。
 - 管理员 Basic Auth、等待任务上移/下移、移出队列、AMS 槽位选择和队首启动。
 - 启动前刷新 MQTT 连接，确认远程文件存在，并等待打印机进入 `RUNNING`。
 - 明确显示 Active Job、Next Queued Job 及上传、重连、启动、打印阶段。
@@ -94,7 +95,8 @@ QUEUED -> CANCELLED
 
 `UPLOADING`、`STARTING`、`PRINTING` 属于 Active Job；只有 `QUEUED` 属于等待队列。
 打印机原始状态会归一化为 `idle`、`starting`、`printing`、`paused`、`finished`、`failed`
-或 `unknown`。任务处于 `STARTING` 且系统正在主动重连时，页面显示 `reconnecting`，不会误报为普通离线。
+或 `unknown`。任务处于 `STARTING` 且系统正在主动重连时，页面显示 `reconnecting`，不会误报为普通离线；
+MQTT 重连成功但尚未收到新状态时显示 `unknown`。
 
 ## 配置
 

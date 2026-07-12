@@ -8,7 +8,7 @@ import secrets
 import sqlite3
 import sys
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import open_database
-from .gateway import BambuAdapter, PrinterService
+from .gateway import BambuAdapter, MQTT_RECONNECT_SECONDS, PrinterService
 from .jobs import Job, JobStateService, JobStatus, QueueError, QueueService, now
 from .phase0 import Phase0Error, PrinterConfig, validate_print_file
 
@@ -246,6 +246,29 @@ async def refresh_printer_connection(printer_service: object) -> None:
         await asyncio.to_thread(start)
 
 
+async def cleanup_printer_connection(printer_service: object) -> None:
+    stop = getattr(printer_service, "stop", None)
+    if callable(stop):
+        with suppress(Exception):
+            await asyncio.to_thread(stop)
+
+
+async def retry_printer_connection(printer_service: object) -> None:
+    while not getattr(printer_service, "connected", False):
+        await asyncio.sleep(MQTT_RECONNECT_SECONDS)
+        if getattr(printer_service, "connected", False):
+            return
+        try:
+            await asyncio.to_thread(printer_service.start)
+        except Exception:
+            await cleanup_printer_connection(printer_service)
+            print(f"Printer unavailable; retrying in {MQTT_RECONNECT_SECONDS} seconds.")
+        else:
+            if getattr(printer_service, "connected", False):
+                return
+            await cleanup_printer_connection(printer_service)
+
+
 async def reconcile_active_job(
     printer_state: str | None,
     queue: QueueService,
@@ -336,14 +359,21 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        retry_task: asyncio.Task[None] | None = None
         if printer_service and adapter and callable(getattr(printer_service, "start", None)):
             try:
                 await asyncio.to_thread(printer_service.start)
             except Exception:
-                pass
+                await cleanup_printer_connection(printer_service)
+                print(f"Printer unavailable; retrying in {MQTT_RECONNECT_SECONDS} seconds.")
+                retry_task = asyncio.create_task(retry_printer_connection(printer_service))
         try:
             yield
         finally:
+            if retry_task:
+                retry_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await retry_task
             if printer_service and callable(getattr(printer_service, "stop", None)):
                 await asyncio.to_thread(printer_service.stop)
             conn.close()
