@@ -56,6 +56,14 @@ function numberValue(value) {
   return missing(value) || !Number.isFinite(number) ? null : number;
 }
 
+function temperaturePair(current, target) {
+  const values = [current, target].map(numberValue);
+  if (values.every((value) => value === null)) return "—";
+  return values
+    .map((value) => value === null ? "—" : `${(Math.trunc(value * 10) / 10).toFixed(1)} °C`)
+    .join(" / ");
+}
+
 function setIconLabel(element, label) {
   element.title = label;
   element.setAttribute("aria-label", label);
@@ -86,9 +94,8 @@ function renderTelemetry(printer) {
     "printer-task": present(printer.current_task),
     "printer-remaining": present(printer.remaining_minutes, " 分钟"),
     "printer-layer": pair(printer.layer, printer.total_layers, ""),
-    "printer-nozzle": pair(temperatures.nozzle?.current, temperatures.nozzle?.target, " °C"),
-    "printer-bed": pair(temperatures.bed?.current, temperatures.bed?.target, " °C"),
-    "printer-chamber": present(temperatures.chamber, " °C"),
+    "printer-nozzle": temperaturePair(temperatures.nozzle?.current, temperatures.nozzle?.target),
+    "printer-bed": temperaturePair(temperatures.bed?.current, temperatures.bed?.target),
   };
   for (const [id, value] of Object.entries(values)) document.querySelector(`#${id}`).textContent = value;
   renderStatusIcons(fans, telemetry.wifi_signal);

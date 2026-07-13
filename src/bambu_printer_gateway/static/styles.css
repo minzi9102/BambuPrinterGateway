@@ -279,7 +279,7 @@ button:disabled {
 
 .queue-page .queue-header {
   display: grid;
-  grid-column: span 5;
+  grid-column: span 4;
   min-width: 0;
   gap: 18px;
   padding: clamp(20px, 2vw, 30px);
@@ -405,7 +405,7 @@ button:disabled {
 }
 
 .queue-page .current-print-card {
-  grid-column: span 7;
+  grid-column: span 8;
 }
 
 .queue-page .queue-card {
@@ -552,7 +552,7 @@ button:disabled {
 }
 
 .queue-page .header-metrics {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding-top: 20px;
   border-top: 1px solid var(--border);
 }
