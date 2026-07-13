@@ -393,18 +393,28 @@ button:disabled {
   box-shadow: 0 8px 24px rgb(31 50 81 / 7%);
 }
 
-.queue-page .current-print-card,
-.queue-page .ams-card {
+.queue-page .current-print-card {
   grid-column: span 7;
 }
 
-.queue-page .queue-card,
-.queue-page .submit-card {
+.queue-page .queue-card {
   grid-column: span 5;
 }
 
+.queue-page .materials-submit-card,
 .queue-page .history-card {
   grid-column: 1 / -1;
+}
+
+.queue-page .materials-submit-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(24px, 3vw, 44px);
+}
+
+.queue-page .submit-panel {
+  padding-left: clamp(24px, 3vw, 44px);
+  border-left: 1px solid var(--border);
 }
 
 .queue-page .card-heading {
@@ -742,10 +752,19 @@ button:disabled {
 
   .queue-page .current-print-card,
   .queue-page .queue-card,
-  .queue-page .submit-card,
-  .queue-page .ams-card,
+  .queue-page .materials-submit-card,
   .queue-page .history-card {
     grid-column: 1;
+  }
+
+  .queue-page .materials-submit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-page .submit-panel {
+    padding: 24px 0 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 
   .queue-page .scroll-list {

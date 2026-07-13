@@ -99,7 +99,7 @@ class AdminStartTests(unittest.TestCase):
     def post_job(self, client: TestClient, name: str = "Alice"):
         return client.post(
             "/api/jobs",
-            data={"display_name": name, "project_name": f"{name} Project"},
+            data={"display_name": name},
             files={"file": (f"{name}.gcode.3mf", sliced_3mf(), "application/octet-stream")},
         )
 
@@ -213,7 +213,7 @@ class AdminStartTests(unittest.TestCase):
             self.assertEqual(cancelled.status_code, 200)
             self.assertEqual(cancelled.json()["job"]["status"], "CANCELLED")
             self.assertEqual(client.get("/api/queue").json()["jobs"], [
-                {"position": 1, "id": second, "display_name": "Bob", "project_name": "Bob Project", "status": "QUEUED"}
+                {"position": 1, "id": second, "display_name": "Bob", "project_name": "Bob.gcode.3mf", "status": "QUEUED"}
             ])
             history = client.get("/api/admin/history", auth=self.auth()).json()["jobs"]
             self.assertEqual(history[0]["id"], first)

@@ -139,8 +139,7 @@ MQTT 重连成功但尚未收到新状态时显示 `unknown`。
 
 ```text
 display_name   必填，提交者名称
-project_name   必填，项目名称
-file           必填，完整 sliced 3MF，且包含 Metadata/plate_1.gcode
+file           必填，完整 sliced 3MF，且包含 Metadata/plate_1.gcode；文件名自动作为项目名称
 ```
 
 Basic Auth 在默认 HTTP 连接上不加密。仅在可信局域网使用，或在公网部署时放到提供 HTTPS

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>3D 打印队列</title>
-    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-2">
+    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-3">
   </head>
   <body class="queue-page">
     <main class="queue-dashboard">
@@ -116,39 +116,38 @@
           <ol id="queue" class="task-list scroll-list"></ol>
         </section>
 
-        <section class="dashboard-card ams-card">
-          <div class="card-heading">
-            <div>
-              <p class="card-kicker">材料状态</p>
-              <h2>AMS 材料</h2>
+        <section class="dashboard-card materials-submit-card">
+          <div class="materials-submit-grid">
+            <div class="ams-panel">
+              <div class="card-heading">
+                <div>
+                  <p class="card-kicker">材料状态</p>
+                  <h2>AMS 材料</h2>
+                </div>
+              </div>
+              <div id="ams-status" class="ams-status"></div>
+            </div>
+            <div class="submit-panel">
+              <div class="card-heading">
+                <div>
+                  <p class="card-kicker">加入队列</p>
+                  <h2>提交打印任务</h2>
+                </div>
+              </div>
+              <form id="job-form">
+                <label>
+                  姓名
+                  <input name="display_name" autocomplete="name" required>
+                </label>
+                <label>
+                  打印文件
+                  <input name="file" type="file" accept=".3mf,.gcode.3mf" required>
+                </label>
+                <button type="submit">加入打印队列</button>
+              </form>
+              <p id="message" role="status"></p>
             </div>
           </div>
-          <div id="ams-status" class="ams-status"></div>
-        </section>
-
-        <section class="dashboard-card submit-card">
-          <div class="card-heading">
-            <div>
-              <p class="card-kicker">加入队列</p>
-              <h2>提交打印任务</h2>
-            </div>
-          </div>
-          <form id="job-form">
-            <label>
-              姓名
-              <input name="display_name" autocomplete="name" required>
-            </label>
-            <label>
-              项目名称
-              <input name="project_name" required>
-            </label>
-            <label>
-              打印文件
-              <input name="file" type="file" accept=".3mf,.gcode.3mf" required>
-            </label>
-            <button type="submit">加入打印队列</button>
-          </form>
-          <p id="message" role="status"></p>
         </section>
 
         <section class="dashboard-card history-card">
@@ -162,6 +161,6 @@
         </section>
       </div>
     </main>
-    <script src="/app.js?v=queue-dashboard-2"></script>
+    <script src="/app.js?v=queue-dashboard-3"></script>
   </body>
 </html>

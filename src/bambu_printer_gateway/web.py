@@ -441,20 +441,19 @@ def create_app(
     @app.post("/api/jobs")
     async def create_job(
         display_name: str = Form(...),
-        project_name: str = Form(...),
         file: UploadFile = File(...),
     ):
         display = display_name.strip()
-        project = project_name.strip()
-        if not display or not project:
-            raise HTTPException(400, "display_name and project_name are required.")
+        if not display:
+            raise HTTPException(400, "display_name is required.")
 
         stored_filename, stored_path = await save_upload(file, uploads, max_bytes)
+        original_filename = (file.filename or "").replace("\\", "/").rsplit("/", 1)[-1] or stored_filename
         try:
             job = queue.create_job(
                 display,
-                project,
-                file.filename or stored_filename,
+                original_filename,
+                original_filename,
                 stored_filename,
                 str(stored_path),
             )

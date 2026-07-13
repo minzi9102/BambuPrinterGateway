@@ -38,7 +38,7 @@ class WebTests(unittest.TestCase):
     def post_job(self, client: TestClient, name: str = "Alice"):
         return client.post(
             "/api/jobs",
-            data={"display_name": name, "project_name": f"{name} Project"},
+            data={"display_name": name},
             files={"file": (f"{name}.gcode.3mf", sliced_3mf(), "application/octet-stream")},
         )
 
@@ -51,13 +51,25 @@ class WebTests(unittest.TestCase):
             queue = client.get("/api/queue").json()["jobs"]
             self.assertEqual(len(queue), 1)
             self.assertEqual(queue[0]["display_name"], "Alice")
+            self.assertEqual(queue[0]["project_name"], "Alice.gcode.3mf")
             self.assertEqual(queue[0]["position"], 1)
+
+    def test_upload_ignores_legacy_project_name(self):
+        with self.make_client() as (client, _):
+            response = client.post(
+                "/api/jobs",
+                data={"display_name": "Alice", "project_name": "Legacy Project"},
+                files={"file": (r"C:\\fakepath\\gearbox.gcode.3mf", sliced_3mf(), "application/octet-stream")},
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(client.get("/api/queue").json()["jobs"][0]["project_name"], "gearbox.gcode.3mf")
 
     def test_invalid_file_returns_400_without_job_or_file(self):
         with self.make_client() as (client, uploads):
             response = client.post(
                 "/api/jobs",
-                data={"display_name": "Alice", "project_name": "Bad"},
+                data={"display_name": "Alice"},
                 files={"file": ("bad.gcode.3mf", b"not a zip", "application/octet-stream")},
             )
 
@@ -69,7 +81,7 @@ class WebTests(unittest.TestCase):
         with self.make_client() as (client, uploads):
             response = client.post(
                 "/api/jobs",
-                data={"display_name": "Alice", "project_name": "Large"},
+                data={"display_name": "Alice"},
                 files={"file": ("large.gcode.3mf", b"x" * (1024 * 1024 + 1), "application/octet-stream")},
             )
 
@@ -251,8 +263,13 @@ class WebTests(unittest.TestCase):
         self.assertIn('class="queue-page"', public_html)
         self.assertIn('id="printer-progress-bar"', public_html)
         self.assertIn("3D 打印队列", public_html)
-        self.assertIn("styles.css?v=queue-dashboard-2", public_html)
-        self.assertIn("app.js?v=queue-dashboard-2", public_html)
+        self.assertIn("styles.css?v=queue-dashboard-3", public_html)
+        self.assertIn("app.js?v=queue-dashboard-3", public_html)
+        self.assertIn('class="dashboard-card queue-card"', public_html)
+        self.assertIn('class="dashboard-card materials-submit-card"', public_html)
+        self.assertIn('class="ams-panel"', public_html)
+        self.assertIn('class="submit-panel"', public_html)
+        self.assertNotIn('name="project_name"', public_html)
         self.assertIn('class="metric-grid header-metrics"', public_html)
         self.assertNotIn('class="dashboard-card telemetry-card"', public_html)
         self.assertIn("重连并启动中", public_script)
