@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>3D 打印队列</title>
-    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-6">
+    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-7">
   </head>
   <body class="queue-page">
     <main class="queue-dashboard">
@@ -74,26 +74,34 @@
             </div>
             <span id="current-phase" class="phase-badge">无任务</span>
           </div>
-          <p id="current-job" class="current-job">暂无活动任务</p>
-          <div class="progress-heading">
-            <span>打印进度</span>
-            <strong id="printer-progress">—</strong>
+          <div class="current-print-body">
+            <div class="print-preview">
+              <img id="printer-preview" alt="当前打印预览" hidden>
+              <span id="printer-preview-empty">暂无预览</span>
+            </div>
+            <div class="current-print-content">
+              <p id="current-job" class="current-job">暂无活动任务</p>
+              <div class="progress-heading">
+                <span>打印进度</span>
+                <strong id="printer-progress">—</strong>
+              </div>
+              <progress id="printer-progress-bar" max="100" value="0" aria-label="打印进度"></progress>
+              <dl class="print-details">
+                <div class="print-task">
+                  <dt>打印文件</dt>
+                  <dd id="printer-task">—</dd>
+                </div>
+                <div>
+                  <dt>剩余时间</dt>
+                  <dd id="printer-remaining">—</dd>
+                </div>
+                <div>
+                  <dt>当前层数</dt>
+                  <dd id="printer-layer">—</dd>
+                </div>
+              </dl>
+            </div>
           </div>
-          <progress id="printer-progress-bar" max="100" value="0" aria-label="打印进度"></progress>
-          <dl class="print-details">
-            <div class="print-task">
-              <dt>打印文件</dt>
-              <dd id="printer-task">—</dd>
-            </div>
-            <div>
-              <dt>剩余时间</dt>
-              <dd id="printer-remaining">—</dd>
-            </div>
-            <div>
-              <dt>当前层数</dt>
-              <dd id="printer-layer">—</dd>
-            </div>
-          </dl>
         </section>
       </div>
 
@@ -159,6 +167,6 @@
         </section>
       </div>
     </main>
-    <script src="/app.js?v=queue-dashboard-6"></script>
+    <script src="/app.js?v=queue-dashboard-7"></script>
   </body>
 </html>

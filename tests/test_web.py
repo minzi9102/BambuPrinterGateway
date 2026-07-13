@@ -1,3 +1,4 @@
+import base64
 import io
 import sqlite3
 import tempfile
@@ -14,11 +15,17 @@ from bambu_printer_gateway.jobs import JobStateService, JobStatus, QueueService
 from bambu_printer_gateway.phase0 import START_GCODE
 from bambu_printer_gateway.web import create_app
 
+PREVIEW_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
-def sliced_3mf() -> bytes:
+
+def sliced_3mf(preview: bytes | None = PREVIEW_PNG) -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as archive:
         archive.writestr(START_GCODE, "G28")
+        if preview is not None:
+            archive.writestr("Metadata/plate_1.png", preview)
     return stream.getvalue()
 
 
@@ -42,6 +49,14 @@ class WebTests(unittest.TestCase):
             files={"file": (f"{name}.gcode.3mf", sliced_3mf(), "application/octet-stream")},
         )
 
+    def mark_printing(self, uploads: Path, job_id: str):
+        conn = open_database(uploads.parent / "queue.db")
+        try:
+            conn.execute("UPDATE jobs SET status = ? WHERE id = ?", (JobStatus.PRINTING.value, job_id))
+            conn.commit()
+        finally:
+            conn.close()
+
     def test_upload_valid_file_queues_job(self):
         with self.make_client() as (client, _):
             response = self.post_job(client)
@@ -53,6 +68,44 @@ class WebTests(unittest.TestCase):
             self.assertEqual(queue[0]["display_name"], "Alice")
             self.assertEqual(queue[0]["project_name"], "Alice.gcode.3mf")
             self.assertEqual(queue[0]["position"], 1)
+
+    def test_active_job_serves_embedded_preview(self):
+        with self.make_client() as (client, uploads):
+            job_id = self.post_job(client).json()["id"]
+            self.mark_printing(uploads, job_id)
+
+            response = client.get(f"/api/jobs/{job_id}/preview")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.content, PREVIEW_PNG)
+            self.assertEqual(response.headers["content-type"], "image/png")
+            self.assertEqual(response.headers["cache-control"], "private, max-age=300")
+            self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+
+    def test_preview_rejects_non_png_content(self):
+        with self.make_client() as (client, uploads):
+            response = client.post(
+                "/api/jobs",
+                data={"display_name": "Alice"},
+                files={"file": ("Alice.gcode.3mf", sliced_3mf(b"not a png"), "application/octet-stream")},
+            )
+            job_id = response.json()["id"]
+            self.mark_printing(uploads, job_id)
+
+            self.assertEqual(client.get(f"/api/jobs/{job_id}/preview").status_code, 404)
+
+    def test_preview_is_unavailable_when_missing_or_job_is_not_active(self):
+        with self.make_client() as (client, uploads):
+            queued_id = self.post_job(client).json()["id"]
+            self.assertEqual(client.get(f"/api/jobs/{queued_id}/preview").status_code, 404)
+            missing_id = client.post(
+                "/api/jobs",
+                data={"display_name": "Bob"},
+                files={"file": ("Bob.gcode.3mf", sliced_3mf(None), "application/octet-stream")},
+            ).json()["id"]
+            self.mark_printing(uploads, missing_id)
+
+            self.assertEqual(client.get(f"/api/jobs/{missing_id}/preview").status_code, 404)
 
     def test_upload_ignores_legacy_project_name(self):
         with self.make_client() as (client, _):
@@ -267,8 +320,11 @@ class WebTests(unittest.TestCase):
         self.assertIn('class="queue-page"', public_html)
         self.assertIn('id="printer-progress-bar"', public_html)
         self.assertIn("3D 打印队列", public_html)
-        self.assertIn("styles.css?v=queue-dashboard-6", public_html)
-        self.assertIn("app.js?v=queue-dashboard-6", public_html)
+        self.assertIn("styles.css?v=queue-dashboard-7", public_html)
+        self.assertIn("app.js?v=queue-dashboard-7", public_html)
+        self.assertIn('id="printer-preview"', public_html)
+        self.assertIn('id="printer-preview-empty"', public_html)
+        self.assertIn("renderPreview", public_script)
         self.assertIn('class="overview-grid"', public_html)
         self.assertIn('class="dashboard-card queue-card"', public_html)
         self.assertIn('class="dashboard-card materials-submit-card"', public_html)

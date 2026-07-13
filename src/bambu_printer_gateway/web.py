@@ -8,6 +8,7 @@ import secrets
 import sqlite3
 import sys
 import uuid
+import zipfile
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,7 @@ from typing import Any
 import uvicorn
 from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .database import open_database
@@ -24,6 +25,9 @@ from .jobs import Job, JobStateService, JobStatus, QueueError, QueueService, now
 from .phase0 import Phase0Error, PrinterConfig, validate_print_file
 
 CHUNK_SIZE = 1024 * 1024
+PREVIEW_PATH = "Metadata/plate_1.png"
+PREVIEW_MAX_BYTES = 2 * 1024 * 1024
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 START_READY_STATES = {"idle", "finished", "failed"}
 COMPLETED_PRINTER_STATES = {"idle", "finished"}
 STARTUP_FAILURE_MESSAGE = "Server restarted during job startup"
@@ -437,6 +441,27 @@ def create_app(
     @app.get("/api/history")
     def get_history():
         return history_response(queue)
+
+    @app.get("/api/jobs/{job_id}/preview")
+    def get_job_preview(job_id: str):
+        job = queue.get_active_job()
+        if not job or job.id != job_id:
+            raise HTTPException(404, "Preview not available.")
+        try:
+            with zipfile.ZipFile(job.stored_path) as archive:
+                info = archive.getinfo(PREVIEW_PATH)
+                if info.file_size > PREVIEW_MAX_BYTES:
+                    raise HTTPException(404, "Preview not available.")
+                preview = archive.read(info)
+        except (KeyError, OSError, RuntimeError, zipfile.BadZipFile) as error:
+            raise HTTPException(404, "Preview not available.") from error
+        if not preview.startswith(PNG_SIGNATURE):
+            raise HTTPException(404, "Preview not available.")
+        return Response(
+            preview,
+            media_type="image/png",
+            headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.post("/api/jobs")
     async def create_job(

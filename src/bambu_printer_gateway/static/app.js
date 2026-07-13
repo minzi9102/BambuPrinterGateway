@@ -15,6 +15,8 @@ const progressBar = document.querySelector("#printer-progress-bar");
 const queueCount = document.querySelector("#queue-count");
 const fanStatus = document.querySelector("#printer-fan-status");
 const wifiStatus = document.querySelector("#printer-wifi-status");
+const printerPreview = document.querySelector("#printer-preview");
+const printerPreviewEmpty = document.querySelector("#printer-preview-empty");
 
 const printerStateLabels = {
   failed: "故障",
@@ -108,6 +110,26 @@ function renderTelemetry(printer) {
   progressBar.setAttribute("aria-valuetext", hasProgress ? `${progress}%` : "暂无进度数据");
 }
 
+function renderPreview(job) {
+  const jobId = job?.id || "";
+  if (printerPreview.dataset.jobId === jobId) return;
+  printerPreview.dataset.jobId = jobId;
+  printerPreview.hidden = true;
+  printerPreviewEmpty.hidden = false;
+  printerPreview.alt = job ? `${job.project_name} 打印预览` : "当前打印预览";
+  if (job) printerPreview.src = `/api/jobs/${encodeURIComponent(job.id)}/preview`;
+  else printerPreview.removeAttribute("src");
+}
+
+printerPreview.addEventListener("load", () => {
+  printerPreview.hidden = false;
+  printerPreviewEmpty.hidden = true;
+});
+printerPreview.addEventListener("error", () => {
+  printerPreview.hidden = true;
+  printerPreviewEmpty.hidden = false;
+});
+
 function renderAmsStatus(trays) {
   const bySlot = new Map(trays.map((tray) => [tray.slot, tray]));
   const options = [0, 1, 2, 3].map((slot) => bySlot.get(slot) || { slot, label: `AMS Slot ${slot + 1}` });
@@ -163,6 +185,7 @@ async function refreshStatus() {
     : "暂无活动任务";
   currentPhase.textContent = job ? phase : "无任务";
   currentPhase.dataset.status = job?.status || "NONE";
+  renderPreview(job);
   offlineNotice.hidden = connected && !["offline", "unknown"].includes(state);
 }
 

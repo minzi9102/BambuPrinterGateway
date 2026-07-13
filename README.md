@@ -127,6 +127,7 @@ MQTT 重连成功但尚未收到新状态时显示 `unknown`。
 | `GET` | `/api/status` | 无 | 打印机、Active Job、进度、温度、风扇、Wi-Fi 和 AMS 状态 |
 | `GET` | `/api/queue` | 无 | 当前 `QUEUED` 任务和 FIFO 位置 |
 | `GET` | `/api/history` | 无 | 最近 100 条终态任务，不返回错误详情 |
+| `GET` | `/api/jobs/{job_id}/preview` | 无 | 当前活动任务的 `Metadata/plate_1.png` 预览 |
 | `POST` | `/api/jobs` | 无 | `multipart/form-data` 上传任务 |
 | `GET` | `/api/admin/history` | Basic Auth | 最近 100 条终态任务及 `error_message` |
 | `GET` | `/api/admin/debug` | Basic Auth | 运行时、打印机原始字段、AMS 和队列诊断信息 |
