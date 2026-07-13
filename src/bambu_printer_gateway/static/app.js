@@ -13,6 +13,8 @@ const currentPhase = document.querySelector("#current-phase");
 const printerProgress = document.querySelector("#printer-progress");
 const progressBar = document.querySelector("#printer-progress-bar");
 const queueCount = document.querySelector("#queue-count");
+const fanStatus = document.querySelector("#printer-fan-status");
+const wifiStatus = document.querySelector("#printer-wifi-status");
 
 const printerStateLabels = {
   failed: "故障",
@@ -49,6 +51,33 @@ function pair(current, target, unit) {
   return `${present(current, unit)} / ${present(target, unit)}`;
 }
 
+function numberValue(value) {
+  const number = Number(value);
+  return missing(value) || !Number.isFinite(number) ? null : number;
+}
+
+function setIconLabel(element, label) {
+  element.title = label;
+  element.setAttribute("aria-label", label);
+}
+
+function renderStatusIcons(fans, wifiSignal) {
+  const readings = [fans.cooling, fans.heatbreak, fans.auxiliary_1, fans.auxiliary_2]
+    .map(numberValue)
+    .filter((value) => value !== null);
+  const fanState = readings.length ? (readings.some((value) => value > 0) ? "active" : "inactive") : "unknown";
+  const fanLabel = { active: "风扇运行中", inactive: "风扇已停止", unknown: "风扇状态未知" }[fanState];
+  fanStatus.dataset.state = fanState;
+  setIconLabel(fanStatus, fanLabel);
+
+  const signal = Number.parseFloat(String(wifiSignal));
+  const hasSignal = !missing(wifiSignal) && Number.isFinite(signal);
+  const level = !hasSignal ? 0 : signal >= -55 ? 3 : signal >= -67 ? 2 : signal >= -80 ? 1 : 0;
+  const quality = ["无信号", "弱", "中", "强"][level];
+  wifiStatus.dataset.level = String(level);
+  setIconLabel(wifiStatus, hasSignal ? `Wi-Fi 信号：${wifiSignal}（${quality}）` : "Wi-Fi 信号未知");
+}
+
 function renderTelemetry(printer) {
   const telemetry = printer.telemetry || {};
   const temperatures = telemetry.temperatures || {};
@@ -60,13 +89,9 @@ function renderTelemetry(printer) {
     "printer-nozzle": pair(temperatures.nozzle?.current, temperatures.nozzle?.target, " °C"),
     "printer-bed": pair(temperatures.bed?.current, temperatures.bed?.target, " °C"),
     "printer-chamber": present(temperatures.chamber, " °C"),
-    "printer-cooling-fan": present(fans.cooling),
-    "printer-heatbreak-fan": present(fans.heatbreak),
-    "printer-auxiliary-fan-1": present(fans.auxiliary_1),
-    "printer-auxiliary-fan-2": present(fans.auxiliary_2),
-    "printer-wifi": present(telemetry.wifi_signal),
   };
   for (const [id, value] of Object.entries(values)) document.querySelector(`#${id}`).textContent = value;
+  renderStatusIcons(fans, telemetry.wifi_signal);
 
   const rawProgress = Number(printer.progress);
   const hasProgress = !missing(printer.progress) && Number.isFinite(rawProgress);

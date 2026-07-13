@@ -278,16 +278,21 @@ button:disabled {
 }
 
 .queue-page .queue-header {
-  display: flex;
+  display: grid;
   gap: 24px;
-  align-items: center;
-  justify-content: space-between;
   margin-bottom: 20px;
   padding: clamp(20px, 2vw, 30px);
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--card-bg);
   box-shadow: 0 10px 32px rgb(31 50 81 / 8%);
+}
+
+.queue-page .queue-header-main {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .queue-page h1,
@@ -389,7 +394,7 @@ button:disabled {
 }
 
 .queue-page .current-print-card,
-.queue-page .telemetry-card {
+.queue-page .ams-card {
   grid-column: span 7;
 }
 
@@ -398,7 +403,6 @@ button:disabled {
   grid-column: span 5;
 }
 
-.queue-page .ams-card,
 .queue-page .history-card {
   grid-column: 1 / -1;
 }
@@ -521,6 +525,74 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
+}
+
+.queue-page .header-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.queue-page .icon-metric dd {
+  margin-top: 8px;
+}
+
+.queue-page .status-icon {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  color: #94a3b8;
+  background: #e2e8f0;
+}
+
+.queue-page .fan-status svg {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+}
+
+.queue-page .fan-status[data-state="active"] {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
+.queue-page .wifi-status {
+  color: var(--primary);
+  background: #eff6ff;
+}
+
+.queue-page .wifi-status svg {
+  width: 36px;
+  height: 36px;
+  fill: none;
+}
+
+.queue-page .wifi-wave {
+  fill: none;
+  stroke: #cbd5e1;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.queue-page .wifi-dot {
+  fill: #cbd5e1;
+}
+
+.queue-page .wifi-status[data-level="1"] .wifi-dot,
+.queue-page .wifi-status[data-level="2"] .wifi-dot,
+.queue-page .wifi-status[data-level="3"] .wifi-dot {
+  fill: currentColor;
+}
+
+.queue-page .wifi-status[data-level="1"] .wifi-wave-1,
+.queue-page .wifi-status[data-level="2"] .wifi-wave-1,
+.queue-page .wifi-status[data-level="3"] .wifi-wave-1,
+.queue-page .wifi-status[data-level="2"] .wifi-wave-2,
+.queue-page .wifi-status[data-level="3"] .wifi-wave-2,
+.queue-page .wifi-status[data-level="3"] .wifi-wave-3 {
+  stroke: currentColor;
 }
 
 .queue-page .task-list,
@@ -670,7 +742,6 @@ button:disabled {
 
   .queue-page .current-print-card,
   .queue-page .queue-card,
-  .queue-page .telemetry-card,
   .queue-page .submit-card,
   .queue-page .ams-card,
   .queue-page .history-card {
@@ -688,9 +759,8 @@ button:disabled {
     padding: 12px;
   }
 
-  .queue-page .queue-header {
+  .queue-page .queue-header-main {
     align-items: stretch;
-    padding: 18px;
     flex-direction: column;
   }
 

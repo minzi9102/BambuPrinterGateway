@@ -4,26 +4,69 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>3D 打印队列</title>
-    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-1">
+    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-2">
   </head>
   <body class="queue-page">
     <main class="queue-dashboard">
       <header class="queue-header">
-        <div>
-          <p class="queue-eyebrow">Bambu Printer Gateway</p>
-          <h1>3D 打印队列</h1>
-          <p class="queue-subtitle">查看实时状态、等待队列并提交打印任务</p>
-        </div>
-        <div class="printer-badges" aria-label="打印机概览">
-          <div id="printer-state-badge" class="printer-badge">
-            <span>打印机状态</span>
-            <strong id="printer-state">未知</strong>
+        <div class="queue-header-main">
+          <div>
+            <p class="queue-eyebrow">Bambu Printer Gateway</p>
+            <h1>3D 打印队列</h1>
+            <p class="queue-subtitle">查看实时状态、等待队列并提交打印任务</p>
           </div>
-          <div id="printer-connected-badge" class="printer-badge">
-            <span>连接状态</span>
-            <strong id="printer-connected">未连接</strong>
+          <div class="printer-badges" aria-label="打印机概览">
+            <div id="printer-state-badge" class="printer-badge">
+              <span>打印机状态</span>
+              <strong id="printer-state">未知</strong>
+            </div>
+            <div id="printer-connected-badge" class="printer-badge">
+              <span>连接状态</span>
+              <strong id="printer-connected">未连接</strong>
+            </div>
           </div>
         </div>
+        <dl class="metric-grid header-metrics">
+          <div>
+            <dt>喷嘴温度</dt>
+            <dd id="printer-nozzle">—</dd>
+          </div>
+          <div>
+            <dt>热床温度</dt>
+            <dd id="printer-bed">—</dd>
+          </div>
+          <div>
+            <dt>腔体温度</dt>
+            <dd id="printer-chamber">—</dd>
+          </div>
+          <div class="icon-metric">
+            <dt>风扇状态</dt>
+            <dd>
+              <span id="printer-fan-status" class="status-icon fan-status" data-state="unknown" role="img" aria-label="风扇状态未知" title="风扇状态未知">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3c3 0 4.6 2.5 3.2 5.1L13.6 11H12V3Z"></path>
+                  <path d="M12 3c3 0 4.6 2.5 3.2 5.1L13.6 11H12V3Z" transform="rotate(90 12 12)"></path>
+                  <path d="M12 3c3 0 4.6 2.5 3.2 5.1L13.6 11H12V3Z" transform="rotate(180 12 12)"></path>
+                  <path d="M12 3c3 0 4.6 2.5 3.2 5.1L13.6 11H12V3Z" transform="rotate(270 12 12)"></path>
+                  <circle cx="12" cy="12" r="2.2"></circle>
+                </svg>
+              </span>
+            </dd>
+          </div>
+          <div class="icon-metric">
+            <dt>Wi-Fi 信号</dt>
+            <dd>
+              <span id="printer-wifi-status" class="status-icon wifi-status" data-level="0" role="img" aria-label="Wi-Fi 信号未知" title="Wi-Fi 信号未知">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path class="wifi-wave wifi-wave-3" d="M3 9a14 14 0 0 1 18 0"></path>
+                  <path class="wifi-wave wifi-wave-2" d="M6.5 12.5a9 9 0 0 1 11 0"></path>
+                  <path class="wifi-wave wifi-wave-1" d="M9.5 16a4 4 0 0 1 5 0"></path>
+                  <circle class="wifi-dot" cx="12" cy="19" r="1.5"></circle>
+                </svg>
+              </span>
+            </dd>
+          </div>
+        </dl>
       </header>
 
       <p id="offline-notice" class="notice" hidden>
@@ -73,47 +116,14 @@
           <ol id="queue" class="task-list scroll-list"></ol>
         </section>
 
-        <section class="dashboard-card telemetry-card">
+        <section class="dashboard-card ams-card">
           <div class="card-heading">
             <div>
-              <p class="card-kicker">实时遥测</p>
-              <h2>设备状态</h2>
+              <p class="card-kicker">材料状态</p>
+              <h2>AMS 材料</h2>
             </div>
           </div>
-          <dl class="metric-grid">
-            <div>
-              <dt>喷嘴温度</dt>
-              <dd id="printer-nozzle">—</dd>
-            </div>
-            <div>
-              <dt>热床温度</dt>
-              <dd id="printer-bed">—</dd>
-            </div>
-            <div>
-              <dt>腔体温度</dt>
-              <dd id="printer-chamber">—</dd>
-            </div>
-            <div>
-              <dt>Wi-Fi 信号</dt>
-              <dd id="printer-wifi">—</dd>
-            </div>
-            <div>
-              <dt>冷却风扇</dt>
-              <dd id="printer-cooling-fan">—</dd>
-            </div>
-            <div>
-              <dt>热端风扇</dt>
-              <dd id="printer-heatbreak-fan">—</dd>
-            </div>
-            <div>
-              <dt>辅助风扇 1</dt>
-              <dd id="printer-auxiliary-fan-1">—</dd>
-            </div>
-            <div>
-              <dt>辅助风扇 2</dt>
-              <dd id="printer-auxiliary-fan-2">—</dd>
-            </div>
-          </dl>
+          <div id="ams-status" class="ams-status"></div>
         </section>
 
         <section class="dashboard-card submit-card">
@@ -141,16 +151,6 @@
           <p id="message" role="status"></p>
         </section>
 
-        <section class="dashboard-card ams-card">
-          <div class="card-heading">
-            <div>
-              <p class="card-kicker">材料状态</p>
-              <h2>AMS 材料</h2>
-            </div>
-          </div>
-          <div id="ams-status" class="ams-status"></div>
-        </section>
-
         <section class="dashboard-card history-card">
           <div class="card-heading">
             <div>
@@ -162,6 +162,6 @@
         </section>
       </div>
     </main>
-    <script src="/app.js?v=queue-dashboard-1"></script>
+    <script src="/app.js?v=queue-dashboard-2"></script>
   </body>
 </html>
