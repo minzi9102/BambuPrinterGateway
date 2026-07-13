@@ -4,11 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>3D 打印队列</title>
-    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-4">
+    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-5">
   </head>
   <body class="queue-page">
     <main class="queue-dashboard">
-      <header class="queue-header">
+      <div class="overview-grid">
+        <header class="queue-header">
         <div class="queue-header-main">
           <div>
             <p class="queue-eyebrow">Bambu Printer Gateway</p>
@@ -67,14 +68,8 @@
             </dd>
           </div>
         </dl>
-      </header>
+        </header>
 
-      <p id="offline-notice" class="notice" hidden>
-        <strong>打印机离线</strong>
-        <span>暂时无法开始打印，现有队列已保留。</span>
-      </p>
-
-      <div class="dashboard-grid">
         <section class="dashboard-card current-print-card">
           <div class="card-heading">
             <div>
@@ -104,7 +99,14 @@
             </div>
           </dl>
         </section>
+      </div>
 
+      <p id="offline-notice" class="notice" hidden>
+        <strong>打印机离线</strong>
+        <span>暂时无法开始打印，现有队列已保留。</span>
+      </p>
+
+      <div class="dashboard-grid">
         <section class="dashboard-card queue-card">
           <div class="card-heading">
             <div>

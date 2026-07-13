@@ -279,8 +279,9 @@ button:disabled {
 
 .queue-page .queue-header {
   display: grid;
-  gap: 24px;
-  margin-bottom: 20px;
+  grid-column: span 5;
+  min-width: 0;
+  gap: 18px;
   padding: clamp(20px, 2vw, 30px);
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -289,10 +290,8 @@ button:disabled {
 }
 
 .queue-page .queue-header-main {
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  gap: 16px;
 }
 
 .queue-page h1,
@@ -306,6 +305,10 @@ button:disabled {
   margin-bottom: 6px;
   font-size: clamp(28px, 3vw, 42px);
   letter-spacing: -0.04em;
+}
+
+.queue-page .queue-header h1 {
+  font-size: clamp(28px, 2.3vw, 36px);
 }
 
 .queue-page h2 {
@@ -330,14 +333,14 @@ button:disabled {
 }
 
 .queue-page .printer-badges {
-  display: flex;
-  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
 .queue-page .printer-badge {
   display: grid;
-  min-width: 138px;
+  min-width: 0;
   gap: 4px;
   padding: 12px 16px;
   border: 1px solid var(--border);
@@ -380,6 +383,14 @@ button:disabled {
   align-items: stretch;
 }
 
+.queue-page .overview-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(16px, 1.6vw, 24px);
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
 .queue-page section {
   margin-bottom: 0;
 }
@@ -394,7 +405,7 @@ button:disabled {
 }
 
 .queue-page .current-print-card {
-  grid-column: 1 / -1;
+  grid-column: span 7;
 }
 
 .queue-page .queue-card {
@@ -541,7 +552,7 @@ button:disabled {
 }
 
 .queue-page .header-metrics {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding-top: 20px;
   border-top: 1px solid var(--border);
 }
@@ -750,10 +761,12 @@ button:disabled {
 }
 
 @media (max-width: 1023px) {
+  .queue-page .overview-grid,
   .queue-page .dashboard-grid {
     grid-template-columns: 1fr;
   }
 
+  .queue-page .queue-header,
   .queue-page .current-print-card,
   .queue-page .queue-card,
   .queue-page .materials-submit-card,
@@ -774,7 +787,6 @@ button:disabled {
 
   .queue-page .queue-header-main {
     align-items: stretch;
-    flex-direction: column;
   }
 
   .queue-page .printer-badges {
