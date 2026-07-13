@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bambu Printer Admin</title>
-    <link rel="stylesheet" href="/styles.css?v=printer-status-2">
+    <link rel="stylesheet" href="/styles.css?v=printer-errors-1">
   </head>
   <body>
     <main>
@@ -20,6 +20,7 @@
             <dd id="printer-connected">false</dd>
           </div>
         </dl>
+        <p id="printer-alert" role="alert" hidden></p>
       </section>
 
       <section>
@@ -105,6 +106,6 @@
       <pre id="debug-output"></pre>
     </aside>
     <button id="debug-toggle" class="debug-toggle" type="button">Debug</button>
-    <script src="/admin.js?v=printer-status-2"></script>
+    <script src="/admin.js?v=printer-errors-1"></script>
   </body>
 </html>

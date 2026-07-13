@@ -12,6 +12,7 @@ const debugPanel = document.querySelector("#debug-panel");
 const debugRefresh = document.querySelector("#debug-refresh");
 const debugUpdated = document.querySelector("#debug-updated");
 const debugOutput = document.querySelector("#debug-output");
+const printerAlert = document.querySelector("#printer-alert");
 let authHeader = null;
 let selectedAmsSlot = 0;
 
@@ -43,6 +44,11 @@ function renderTelemetry(printer) {
     "printer-wifi": present(telemetry.wifi_signal),
   };
   for (const [id, value] of Object.entries(values)) document.querySelector(`#${id}`).textContent = value;
+}
+
+function renderPrinterAlert(error) {
+  printerAlert.hidden = !error;
+  printerAlert.textContent = error ? `Printer alert: ${error.message}` : "";
 }
 
 function ensureAuth() {
@@ -195,15 +201,19 @@ function renderQueue(jobs) {
 }
 
 async function refresh() {
-  const [statusResponse, queueResponse] = await Promise.all([
+  const [statusResponse, queueResponse, debugResponse] = await Promise.all([
     fetch("/api/status"),
     fetch("/api/queue"),
+    authHeader ? fetch("/api/admin/debug", { headers: { Authorization: authHeader } }) : null,
   ]);
   const status = await statusResponse.json();
   const queue = await queueResponse.json();
+  if (debugResponse?.status === 401) authHeader = null;
+  const debug = debugResponse?.ok ? await debugResponse.json() : null;
   state.textContent = status.printer.state;
   connected.textContent = String(status.printer.connected);
   renderTelemetry(status.printer);
+  renderPrinterAlert(debug?.printer?.active_error);
   renderAmsSlots(status.printer.ams_trays || []);
   const active = status.printer.current_job;
   const phase = active?.status === "STARTING" && !status.printer.connected

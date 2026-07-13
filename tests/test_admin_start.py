@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from bambu_printer_gateway.database import open_database
 from bambu_printer_gateway.jobs import JobStatus, QueueService
 from bambu_printer_gateway.phase0 import START_GCODE
-from bambu_printer_gateway.web import create_app
+from bambu_printer_gateway.web import active_printer_error, create_app
 
 
 def sliced_3mf() -> bytes:
@@ -53,11 +53,12 @@ class RetryPrinter(FakePrinter):
 
 
 class FakeAdapter:
-    def __init__(self, printer: FakePrinter, *, exists=True, upload_error=None, confirm=True):
+    def __init__(self, printer: FakePrinter, *, exists=True, upload_error=None, confirm=True, start_error=None):
         self.printer = printer
         self.exists = exists
         self.upload_error = upload_error
         self.confirm = confirm
+        self.start_error = start_error
         self.uploads = []
         self.started = []
 
@@ -71,6 +72,8 @@ class FakeAdapter:
 
     def start_print(self, remote_name: str, remote_path: str, *, ams_slot=None) -> None:
         self.started.append((remote_name, remote_path, ams_slot))
+        if self.start_error:
+            self.printer.raw_status.update(self.start_error)
         if self.confirm:
             self.printer.normalized_state = "printing"
 
@@ -128,6 +131,14 @@ class AdminStartTests(unittest.TestCase):
         try:
             row = conn.execute("SELECT status FROM jobs WHERE id = ?", (job_id,)).fetchone()
             return row["status"]
+        finally:
+            conn.close()
+
+    def job_error(self, db_path: Path, job_id: str):
+        conn = open_database(db_path)
+        try:
+            row = conn.execute("SELECT error_message FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            return row["error_message"]
         finally:
             conn.close()
 
@@ -440,9 +451,26 @@ class AdminStartTests(unittest.TestCase):
             self.assertIn("web_module_file", debug["runtime"])
             self.assertEqual(debug["printer"]["raw_gcode_state"], "SLICING")
             self.assertEqual(debug["printer"]["current_task"], "queue_demo.gcode")
+            self.assertEqual(debug["printer"]["active_error"]["print_error"], 123)
             self.assertTrue(debug["ams"]["ams_present"])
             self.assertEqual(debug["ams"]["ams_tray_count"], 1)
             self.assertEqual(debug["ams"]["ams_trays"][0]["slot"], 1)
+
+    def test_active_printer_error_formats_known_hms_and_safe_fallbacks(self):
+        known = active_printer_error(
+            {
+                "print_error": 117473298,
+                "hms": [{"attr": 117469184, "code": 131080}],
+            }
+        )
+
+        self.assertEqual(known["hms_codes"], ["0700700000020008"])
+        self.assertEqual(
+            known["message"],
+            "无法获取 AMS 映射表 (print_error=117473298; HMS=0700700000020008)",
+        )
+        self.assertIsNone(active_printer_error({"print_error": 0, "hms": []}))
+        self.assertEqual(active_printer_error({"hms": [{"code": 1}]})["message"], "Printer reported an error (HMS=unknown)")
 
     def test_invalid_ams_slot_returns_400_and_keeps_queue(self):
         printer = FakePrinter()
@@ -490,6 +518,32 @@ class AdminStartTests(unittest.TestCase):
             client.get("/api/status")
 
             self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.COMPLETED.value)
+
+    def test_status_marks_idle_printing_job_with_error_failed(self):
+        printer = FakePrinter(state="idle")
+        printer.raw_status.update({"print_error": 42, "hms": []})
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+            self.set_job_status(root / "queue.db", job_id, JobStatus.PRINTING)
+
+            client.get("/api/status")
+
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.FAILED.value)
+            self.assertEqual(self.job_error(root / "queue.db", job_id), "Printer reported an error (print_error=42)")
+
+    def test_status_keeps_printing_job_with_error_active(self):
+        printer = FakePrinter(state="printing")
+        printer.raw_status.update({"print_error": 42, "hms": [{"attr": 1, "code": 2}]})
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+            self.set_job_status(root / "queue.db", job_id, JobStatus.PRINTING)
+
+            current = client.get("/api/status").json()["printer"]["current_job"]
+
+            self.assertEqual(current["id"], job_id)
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.PRINTING.value)
 
     def test_status_marks_failed_printing_job_failed(self):
         printer = FakePrinter(state="failed")
@@ -592,6 +646,32 @@ class AdminStartTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 504)
             self.assertEqual(client.get("/api/queue").json()["jobs"], [])
+
+    def test_start_error_immediately_marks_job_failed_with_reason(self):
+        printer = FakePrinter()
+        error = {"print_error": 117473298, "hms": [{"attr": 117469184, "code": 131080}]}
+        adapter = FakeAdapter(printer, confirm=False, start_error=error)
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+
+            response = self.start_next(client)
+
+            expected = "无法获取 AMS 映射表 (print_error=117473298; HMS=0700700000020008)"
+            self.assertEqual(response.status_code, 502)
+            self.assertEqual(response.json()["detail"], expected)
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.FAILED.value)
+            self.assertEqual(self.job_error(root / "queue.db", job_id), expected)
+
+    def test_printing_confirmation_wins_over_new_warning(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer, start_error={"print_error": 42, "hms": [{"attr": 1, "code": 2}]})
+        with self.make_client(printer, adapter) as (client, root):
+            job_id = self.post_job(client).json()["id"]
+
+            response = self.start_next(client)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(self.job_status(root / "queue.db", job_id), JobStatus.PRINTING.value)
 
 
 if __name__ == "__main__":

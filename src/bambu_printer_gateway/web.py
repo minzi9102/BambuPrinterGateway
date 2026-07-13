@@ -29,8 +29,8 @@ PREVIEW_PATH = "Metadata/plate_1.png"
 PREVIEW_MAX_BYTES = 2 * 1024 * 1024
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 START_READY_STATES = {"idle", "finished", "failed"}
-COMPLETED_PRINTER_STATES = {"idle", "finished"}
 STARTUP_FAILURE_MESSAGE = "Server restarted during job startup"
+KNOWN_HMS_ERRORS = {"0700700000020008": "无法获取 AMS 映射表"}
 security = HTTPBasic()
 
 
@@ -182,6 +182,36 @@ def telemetry_response(raw_status: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def active_printer_error(raw_status: dict[str, Any]) -> dict[str, Any] | None:
+    print_error = raw_status.get("print_error")
+    active_print_error = print_error not in (None, 0, "0", "")
+    hms = raw_status.get("hms") or []
+    if not active_print_error and not hms:
+        return None
+
+    hms_codes = []
+    for item in hms:
+        if not isinstance(item, dict):
+            continue
+        try:
+            hms_codes.append(f"{int(item['attr']):08X}{int(item['code']):08X}")
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    description = next((KNOWN_HMS_ERRORS[code] for code in hms_codes if code in KNOWN_HMS_ERRORS), None)
+    details = []
+    if active_print_error:
+        details.append(f"print_error={print_error}")
+    if hms_codes:
+        details.append(f"HMS={','.join(hms_codes)}")
+    elif hms:
+        details.append("HMS=unknown")
+    message = description or "Printer reported an error"
+    if details:
+        message = f"{message} ({'; '.join(details)})"
+    return {"message": message, "print_error": print_error if active_print_error else None, "hms_codes": hms_codes}
+
+
 def fail_interrupted_startup_jobs(conn: sqlite3.Connection) -> None:
     with conn:
         conn.execute(
@@ -251,6 +281,7 @@ def debug_response(printer_service: object | None, queue: QueueService) -> dict[
             "raw_gcode_state": raw_status.get("gcode_state"),
             "print_error": raw_status.get("print_error"),
             "hms": raw_status.get("hms"),
+            "active_error": active_printer_error(raw_status),
             "current_task": current_task(raw_status),
             "progress": raw_status.get("mc_percent"),
         },
@@ -265,13 +296,24 @@ def debug_response(printer_service: object | None, queue: QueueService) -> dict[
     }
 
 
-async def wait_for_printing(printer_service: object, timeout: int) -> bool:
+async def wait_for_printing(
+    printer_service: object,
+    timeout: int,
+    baseline_error: dict[str, Any] | None,
+) -> tuple[bool, str | None]:
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
-        if getattr(printer_service, "normalized_state", None) == "printing":
-            return True
+        printer_state = getattr(printer_service, "normalized_state", None)
+        error = active_printer_error(getattr(printer_service, "raw_status", None) or {})
+        if printer_state == "printing":
+            return True, None
+        if printer_state == "failed":
+            return False, error["message"] if error else "Printer reported FAILED"
+        if error and error != baseline_error:
+            return False, error["message"]
         await asyncio.sleep(0.25)
-    return False
+    error = active_printer_error(getattr(printer_service, "raw_status", None) or {})
+    return False, error["message"] if error else None
 
 
 async def refresh_printer_connection(printer_service: object) -> None:
@@ -306,7 +348,7 @@ async def retry_printer_connection(printer_service: object) -> None:
 
 
 async def reconcile_active_job(
-    printer_state: str | None,
+    printer_service: object,
     queue: QueueService,
     states: JobStateService,
     hub: RealtimeHub,
@@ -314,10 +356,16 @@ async def reconcile_active_job(
     active = queue.get_active_job()
     if not active or active.status != JobStatus.PRINTING:
         return
-    if printer_state in COMPLETED_PRINTER_STATES:
+    printer_state = getattr(printer_service, "normalized_state", None)
+    error = active_printer_error(getattr(printer_service, "raw_status", None) or {})
+    if printer_state == "finished":
+        states.change_job_state(active.id, JobStatus.COMPLETED)
+    elif printer_state == "idle" and error:
+        states.change_job_state(active.id, JobStatus.FAILED, error["message"])
+    elif printer_state == "idle":
         states.change_job_state(active.id, JobStatus.COMPLETED)
     elif printer_state == "failed":
-        states.change_job_state(active.id, JobStatus.FAILED, "Printer reported FAILED")
+        states.change_job_state(active.id, JobStatus.FAILED, error["message"] if error else "Printer reported FAILED")
     else:
         return
     await hub.broadcast({"type": "job.changed"})
@@ -423,7 +471,7 @@ def create_app(
     @app.get("/api/status")
     async def get_status():
         if printer_service:
-            await reconcile_active_job(getattr(printer_service, "normalized_state", None), queue, states, hub)
+            await reconcile_active_job(printer_service, queue, states, hub)
         return status_response(printer_service, queue)
 
     @app.get("/api/admin/debug")
@@ -503,7 +551,7 @@ def create_app(
             raise HTTPException(409, "Printer is not idle.")
 
         async with operation_lock:
-            await reconcile_active_job(printer_state, queue, states, hub)
+            await reconcile_active_job(printer_service, queue, states, hub)
             if queue.get_active_job():
                 raise HTTPException(409, "A job is already active.")
             job = queue.get_next_job()
@@ -523,11 +571,14 @@ def create_app(
                 job = states.change_job_state(job.id, JobStatus.STARTING)
                 await hub.broadcast({"type": "job.changed"})
                 await refresh_printer_connection(printer_service)
+                baseline_error = active_printer_error(getattr(printer_service, "raw_status", None) or {})
                 await asyncio.to_thread(adapter.start_print, job.remote_filename, remote_path, ams_slot=ams_slot)
-                if not await wait_for_printing(printer_service, start_timeout):
-                    states.change_job_state(job.id, JobStatus.FAILED, "Printer did not confirm print start")
+                started, printer_error = await wait_for_printing(printer_service, start_timeout, baseline_error)
+                if not started:
+                    failure = printer_error or "Printer did not confirm print start"
+                    states.change_job_state(job.id, JobStatus.FAILED, failure)
                     await hub.broadcast({"type": "job.changed"})
-                    raise HTTPException(504, "Printer did not confirm print start.")
+                    raise HTTPException(502 if printer_error else 504, failure)
                 job = states.change_job_state(job.id, JobStatus.PRINTING)
             except HTTPException:
                 raise
