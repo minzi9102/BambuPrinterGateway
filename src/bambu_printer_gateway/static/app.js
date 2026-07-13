@@ -4,13 +4,48 @@ const message = document.querySelector("#message");
 const form = document.querySelector("#job-form");
 const offlineNotice = document.querySelector("#offline-notice");
 const amsStatus = document.querySelector("#ams-status");
+const printerState = document.querySelector("#printer-state");
+const printerConnected = document.querySelector("#printer-connected");
+const printerStateBadge = document.querySelector("#printer-state-badge");
+const printerConnectedBadge = document.querySelector("#printer-connected-badge");
+const currentJob = document.querySelector("#current-job");
+const currentPhase = document.querySelector("#current-phase");
+const printerProgress = document.querySelector("#printer-progress");
+const progressBar = document.querySelector("#printer-progress-bar");
+const queueCount = document.querySelector("#queue-count");
+
+const printerStateLabels = {
+  failed: "故障",
+  finished: "已完成",
+  idle: "空闲",
+  offline: "离线",
+  paused: "已暂停",
+  printing: "打印中",
+  reconnecting: "重连中",
+  starting: "启动中",
+  unknown: "未知",
+};
+
+const jobStatusLabels = {
+  CANCELLED: "已取消",
+  COMPLETED: "已完成",
+  FAILED: "失败",
+  PRINTING: "打印中",
+  QUEUED: "排队中",
+  STARTING: "启动中",
+  UPLOADING: "上传中",
+};
+
+function missing(value) {
+  return value === null || value === undefined || value === "";
+}
 
 function present(value, unit = "") {
-  return value === null || value === undefined || value === "" ? "—" : `${value}${unit}`;
+  return missing(value) ? "—" : `${value}${unit}`;
 }
 
 function pair(current, target, unit) {
-  if ([current, target].every((value) => value === null || value === undefined || value === "")) return "—";
+  if ([current, target].every(missing)) return "—";
   return `${present(current, unit)} / ${present(target, unit)}`;
 }
 
@@ -20,8 +55,7 @@ function renderTelemetry(printer) {
   const fans = telemetry.fans || {};
   const values = {
     "printer-task": present(printer.current_task),
-    "printer-progress": present(printer.progress, "%"),
-    "printer-remaining": present(printer.remaining_minutes, " min"),
+    "printer-remaining": present(printer.remaining_minutes, " 分钟"),
     "printer-layer": pair(printer.layer, printer.total_layers, ""),
     "printer-nozzle": pair(temperatures.nozzle?.current, temperatures.nozzle?.target, " °C"),
     "printer-bed": pair(temperatures.bed?.current, temperatures.bed?.target, " °C"),
@@ -33,6 +67,13 @@ function renderTelemetry(printer) {
     "printer-wifi": present(telemetry.wifi_signal),
   };
   for (const [id, value] of Object.entries(values)) document.querySelector(`#${id}`).textContent = value;
+
+  const rawProgress = Number(printer.progress);
+  const hasProgress = !missing(printer.progress) && Number.isFinite(rawProgress);
+  const progress = hasProgress ? Math.min(100, Math.max(0, rawProgress)) : 0;
+  printerProgress.textContent = hasProgress ? `${progress}%` : "—";
+  progressBar.value = progress;
+  progressBar.setAttribute("aria-valuetext", hasProgress ? `${progress}%` : "暂无进度数据");
 }
 
 function renderAmsStatus(trays) {
@@ -47,12 +88,13 @@ function renderAmsStatus(trays) {
       const description = document.createElement("span");
       const color = String(tray.color || "");
       const cssColor = /^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(color) ? `#${color.slice(0, 6)}` : "#94a3b8";
-      const details = String(tray.label || `AMS Slot ${tray.slot + 1}`).replace(`AMS Slot ${tray.slot + 1}`, "").replace(/^ - /, "") || "No material data";
+      const slotName = `AMS Slot ${tray.slot + 1}`;
+      const details = String(tray.label || slotName).replace(slotName, "").replace(/^ - /, "") || "暂无材料数据";
       card.className = "ams-status-card";
       swatch.className = "ams-color";
       swatch.style.background = cssColor;
       copy.className = "ams-slot-copy";
-      title.textContent = `AMS Slot ${tray.slot + 1}`;
+      title.textContent = `AMS 槽位 ${tray.slot + 1}`;
       description.textContent = details;
       copy.append(title, description);
       card.append(swatch, copy);
@@ -61,64 +103,117 @@ function renderAmsStatus(trays) {
   );
 }
 
+function emptyItem(text) {
+  const item = document.createElement("li");
+  item.className = "empty-list";
+  item.textContent = text;
+  return item;
+}
+
 async function refreshStatus() {
   const response = await fetch("/api/status");
   const data = await response.json();
-  document.querySelector("#printer-state").textContent = data.printer.state;
-  document.querySelector("#printer-connected").textContent = String(data.printer.connected);
+  const state = data.printer.state || "unknown";
+  const connected = Boolean(data.printer.connected);
+  printerState.textContent = printerStateLabels[state] || state;
+  printerStateBadge.dataset.state = state;
+  printerConnected.textContent = connected ? "已连接" : "未连接";
+  printerConnectedBadge.dataset.connected = String(connected);
   renderTelemetry(data.printer);
   renderAmsStatus(data.printer.ams_trays || []);
+
   const job = data.printer.current_job;
-  const phase = job?.status === "STARTING" && !data.printer.connected
-    ? "Reconnecting and starting"
-    : { UPLOADING: "Uploading", STARTING: "Starting", PRINTING: "Printing" }[job?.status];
-  document.querySelector("#current-job").textContent = job
-    ? `${job.display_name} - ${job.project_name} · ${phase}`
-    : "No active job";
-  offlineNotice.hidden = data.printer.connected && !["offline", "unknown"].includes(data.printer.state);
+  const phase = job?.status === "STARTING" && !connected
+    ? "重连并启动中"
+    : jobStatusLabels[job?.status] || "处理中";
+  currentJob.textContent = job
+    ? `${job.display_name} · ${job.project_name}`
+    : "暂无活动任务";
+  currentPhase.textContent = job ? phase : "无任务";
+  currentPhase.dataset.status = job?.status || "NONE";
+  offlineNotice.hidden = connected && !["offline", "unknown"].includes(state);
 }
 
 async function refreshQueue() {
   const response = await fetch("/api/queue");
   const data = await response.json();
+  queueCount.textContent = `${data.jobs.length} 个任务`;
+  if (!data.jobs.length) {
+    queueList.replaceChildren(emptyItem("当前没有等待任务"));
+    return;
+  }
   queueList.replaceChildren(
-    ...data.jobs.map((job) => {
+    ...data.jobs.map((job, index) => {
       const item = document.createElement("li");
-      item.textContent = `${job.display_name} - ${job.project_name}`;
+      const position = document.createElement("span");
+      const details = document.createElement("span");
+      const project = document.createElement("strong");
+      const submitter = document.createElement("span");
+      const status = document.createElement("span");
+      item.className = "task-item";
+      position.className = "task-position";
+      details.className = "task-copy";
+      status.className = "status-pill";
+      status.dataset.status = job.status;
+      position.textContent = String(job.position || index + 1);
+      project.textContent = job.project_name;
+      submitter.textContent = `提交人：${job.display_name}`;
+      status.textContent = jobStatusLabels[job.status] || job.status;
+      details.append(project, submitter);
+      item.append(position, details, status);
       return item;
     }),
   );
+}
+
+function localTime(value) {
+  if (!value) return "时间未知";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "时间未知" : date.toLocaleString("zh-CN");
 }
 
 async function refreshHistory() {
   const response = await fetch("/api/history");
   const data = await response.json();
+  if (!data.jobs.length) {
+    historyList.replaceChildren(emptyItem("暂无打印历史"));
+    return;
+  }
   historyList.replaceChildren(
     ...data.jobs.map((job) => {
       const item = document.createElement("li");
-      const finished = job.finished_at ? new Date(job.finished_at).toLocaleString() : "Unknown time";
-      item.textContent = `${job.display_name} - ${job.project_name} · ${job.status} · ${finished}`;
+      const details = document.createElement("span");
+      const project = document.createElement("strong");
+      const meta = document.createElement("span");
+      const status = document.createElement("span");
+      item.className = "history-item";
+      details.className = "task-copy";
+      status.className = "status-pill";
+      status.dataset.status = job.status;
+      project.textContent = `${job.display_name} · ${job.project_name}`;
+      meta.textContent = localTime(job.finished_at);
+      status.textContent = jobStatusLabels[job.status] || job.status;
+      details.append(project, meta);
+      item.append(details, status);
       return item;
     }),
   );
-  if (!data.jobs.length) historyList.textContent = "No print history.";
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  message.textContent = "Uploading...";
+  message.textContent = "正在上传…";
   const response = await fetch("/api/jobs", {
     method: "POST",
     body: new FormData(form),
   });
   if (response.ok) {
     form.reset();
-    message.textContent = "Queued.";
+    message.textContent = "任务已加入队列。";
     await refreshQueue();
     return;
   }
-  const error = await response.json();
-  message.textContent = error.detail || "Upload failed.";
+  message.textContent = "提交失败，请检查文件后重试。";
 });
 
 function connectSocket() {

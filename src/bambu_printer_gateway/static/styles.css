@@ -254,3 +254,477 @@ button:disabled {
   word-break: break-word;
   font-size: 12px;
 }
+
+.queue-page {
+  --page-bg: #eef3f9;
+  --card-bg: #fff;
+  --soft-bg: #f6f8fc;
+  --border: #dbe3ef;
+  --muted: #64748b;
+  --text: #172033;
+  --primary: #2563eb;
+  min-width: 320px;
+  color: var(--text);
+  background: var(--page-bg);
+  font-family: Inter, "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+}
+
+.queue-page .queue-dashboard {
+  width: 100%;
+  max-width: none;
+  min-height: 100dvh;
+  margin: 0;
+  padding: clamp(16px, 2vw, 32px);
+}
+
+.queue-page .queue-header {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: clamp(20px, 2vw, 30px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card-bg);
+  box-shadow: 0 10px 32px rgb(31 50 81 / 8%);
+}
+
+.queue-page h1,
+.queue-page h2,
+.queue-page h3,
+.queue-page p {
+  margin-top: 0;
+}
+
+.queue-page h1 {
+  margin-bottom: 6px;
+  font-size: clamp(28px, 3vw, 42px);
+  letter-spacing: -0.04em;
+}
+
+.queue-page h2 {
+  margin-bottom: 0;
+  font-size: clamp(20px, 1.7vw, 26px);
+  letter-spacing: -0.02em;
+}
+
+.queue-page .queue-eyebrow,
+.queue-page .card-kicker {
+  margin-bottom: 6px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.queue-page .queue-subtitle {
+  margin-bottom: 0;
+  color: var(--muted);
+}
+
+.queue-page .printer-badges {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+}
+
+.queue-page .printer-badge {
+  display: grid;
+  min-width: 138px;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--soft-bg);
+}
+
+.queue-page .printer-badge span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.queue-page .printer-badge strong {
+  font-size: 18px;
+}
+
+.queue-page #printer-state-badge[data-state="printing"],
+.queue-page #printer-connected-badge[data-connected="true"] {
+  border-color: #bbf7d0;
+  color: #166534;
+  background: #f0fdf4;
+}
+
+.queue-page #printer-state-badge[data-state="failed"],
+.queue-page #printer-state-badge[data-state="offline"],
+.queue-page #printer-connected-badge[data-connected="false"] {
+  border-color: #fecaca;
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.queue-page .notice {
+  margin: 0 0 20px;
+}
+
+.queue-page .dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: clamp(16px, 1.6vw, 24px);
+  align-items: stretch;
+}
+
+.queue-page section {
+  margin-bottom: 0;
+}
+
+.queue-page .dashboard-card {
+  min-width: 0;
+  padding: clamp(18px, 1.8vw, 26px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card-bg);
+  box-shadow: 0 8px 24px rgb(31 50 81 / 7%);
+}
+
+.queue-page .current-print-card,
+.queue-page .telemetry-card {
+  grid-column: span 7;
+}
+
+.queue-page .queue-card,
+.queue-page .submit-card {
+  grid-column: span 5;
+}
+
+.queue-page .ams-card,
+.queue-page .history-card {
+  grid-column: 1 / -1;
+}
+
+.queue-page .card-heading {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.queue-page .phase-badge,
+.queue-page .count-badge,
+.queue-page .status-pill {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #475569;
+  background: #e9eef6;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.queue-page .phase-badge[data-status="PRINTING"],
+.queue-page .status-pill[data-status="COMPLETED"] {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.queue-page .phase-badge[data-status="UPLOADING"],
+.queue-page .phase-badge[data-status="STARTING"],
+.queue-page .status-pill[data-status="QUEUED"] {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.queue-page .status-pill[data-status="FAILED"],
+.queue-page .status-pill[data-status="CANCELLED"] {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.queue-page .current-job {
+  min-height: 34px;
+  margin-bottom: 20px;
+  overflow-wrap: anywhere;
+  font-size: clamp(22px, 2.4vw, 34px);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.queue-page .progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.queue-page .progress-heading strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.queue-page progress {
+  width: 100%;
+  height: 14px;
+  margin-bottom: 22px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e2e8f0;
+  appearance: none;
+}
+
+.queue-page progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.queue-page progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
+}
+
+.queue-page progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.queue-page .print-details {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+.queue-page .print-details > div,
+.queue-page .metric-grid > div {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--soft-bg);
+}
+
+.queue-page dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.queue-page dd {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+}
+
+.queue-page .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.queue-page .task-list,
+.queue-page .history-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.queue-page .scroll-list {
+  max-height: 22rem;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.queue-page .task-item,
+.queue-page .history-item {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--soft-bg);
+}
+
+.queue-page .task-item {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+}
+
+.queue-page .history-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.queue-page .task-position {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-weight: 800;
+}
+
+.queue-page .task-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.queue-page .task-copy strong,
+.queue-page .task-copy span {
+  overflow-wrap: anywhere;
+}
+
+.queue-page .task-copy span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.queue-page .empty-list {
+  display: grid;
+  min-height: 128px;
+  place-items: center;
+  padding: 20px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--soft-bg);
+  text-align: center;
+}
+
+.queue-page form {
+  gap: 16px;
+}
+
+.queue-page label {
+  color: #334155;
+  font-size: 14px;
+}
+
+.queue-page input {
+  min-height: 46px;
+  border-color: var(--border);
+  border-radius: 10px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.queue-page input:focus {
+  border-color: #60a5fa;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(37 99 235 / 12%);
+}
+
+.queue-page input[type="file"] {
+  padding: 6px;
+}
+
+.queue-page input::file-selector-button {
+  min-height: 32px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.queue-page button {
+  min-height: 46px;
+  border-radius: 10px;
+  background: var(--primary);
+}
+
+.queue-page #message {
+  margin: 14px 0 0;
+  color: var(--muted);
+}
+
+.queue-page .ams-status {
+  gap: 14px;
+  margin-bottom: 0;
+}
+
+.queue-page .ams-status-card {
+  min-height: 90px;
+  padding: 14px;
+  border-width: 1px;
+  border-radius: 12px;
+  background: var(--soft-bg);
+}
+
+.queue-page .ams-color {
+  flex-basis: 28px;
+  width: 28px;
+  height: 28px;
+}
+
+@media (max-width: 1023px) {
+  .queue-page .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-page .current-print-card,
+  .queue-page .queue-card,
+  .queue-page .telemetry-card,
+  .queue-page .submit-card,
+  .queue-page .ams-card,
+  .queue-page .history-card {
+    grid-column: 1;
+  }
+
+  .queue-page .scroll-list {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 640px) {
+  .queue-page .queue-dashboard {
+    padding: 12px;
+  }
+
+  .queue-page .queue-header {
+    align-items: stretch;
+    padding: 18px;
+    flex-direction: column;
+  }
+
+  .queue-page .printer-badges {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-page .printer-badge {
+    min-width: 0;
+  }
+
+  .queue-page .dashboard-card {
+    padding: 18px;
+  }
+
+  .queue-page .print-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-page .print-task {
+    grid-column: 1 / -1;
+  }
+
+  .queue-page .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-page .task-item {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .queue-page .task-item .status-pill {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

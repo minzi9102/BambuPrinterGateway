@@ -1,121 +1,167 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Bambu Printer Queue</title>
-    <link rel="stylesheet" href="/styles.css?v=printer-status-2">
+    <title>3D 打印队列</title>
+    <link rel="stylesheet" href="/styles.css?v=queue-dashboard-1">
   </head>
-  <body>
-    <main>
-      <section class="status">
-        <h1>3D Printer Queue</h1>
-        <dl>
-          <div>
-            <dt>Status</dt>
-            <dd id="printer-state">unknown</dd>
+  <body class="queue-page">
+    <main class="queue-dashboard">
+      <header class="queue-header">
+        <div>
+          <p class="queue-eyebrow">Bambu Printer Gateway</p>
+          <h1>3D 打印队列</h1>
+          <p class="queue-subtitle">查看实时状态、等待队列并提交打印任务</p>
+        </div>
+        <div class="printer-badges" aria-label="打印机概览">
+          <div id="printer-state-badge" class="printer-badge">
+            <span>打印机状态</span>
+            <strong id="printer-state">未知</strong>
           </div>
-          <div>
-            <dt>Connected</dt>
-            <dd id="printer-connected">false</dd>
+          <div id="printer-connected-badge" class="printer-badge">
+            <span>连接状态</span>
+            <strong id="printer-connected">未连接</strong>
           </div>
-          <div>
-            <dt>Current Job</dt>
-            <dd id="current-job">No active job</dd>
-          </div>
-        </dl>
-        <p id="offline-notice" class="notice" hidden>
-          <strong>PRINTER OFFLINE</strong>
-          <span>Printing is temporarily unavailable. Existing queue has been preserved.</span>
-        </p>
-      </section>
+        </div>
+      </header>
 
-      <section>
-        <h2>Printer Telemetry</h2>
-        <dl>
-          <div>
-            <dt>Current Task</dt>
-            <dd id="printer-task">—</dd>
-          </div>
-          <div>
-            <dt>Progress</dt>
-            <dd id="printer-progress">—</dd>
-          </div>
-          <div>
-            <dt>Remaining</dt>
-            <dd id="printer-remaining">—</dd>
-          </div>
-          <div>
-            <dt>Layer</dt>
-            <dd id="printer-layer">—</dd>
-          </div>
-          <div>
-            <dt>Nozzle</dt>
-            <dd id="printer-nozzle">—</dd>
-          </div>
-          <div>
-            <dt>Bed</dt>
-            <dd id="printer-bed">—</dd>
-          </div>
-          <div>
-            <dt>Chamber</dt>
-            <dd id="printer-chamber">—</dd>
-          </div>
-          <div>
-            <dt>Cooling Fan</dt>
-            <dd id="printer-cooling-fan">—</dd>
-          </div>
-          <div>
-            <dt>Heatbreak Fan</dt>
-            <dd id="printer-heatbreak-fan">—</dd>
-          </div>
-          <div>
-            <dt>Auxiliary Fan 1</dt>
-            <dd id="printer-auxiliary-fan-1">—</dd>
-          </div>
-          <div>
-            <dt>Auxiliary Fan 2</dt>
-            <dd id="printer-auxiliary-fan-2">—</dd>
-          </div>
-          <div>
-            <dt>Wi-Fi</dt>
-            <dd id="printer-wifi">—</dd>
-          </div>
-        </dl>
-        <h3>AMS Materials</h3>
-        <div id="ams-status" class="ams-status"></div>
-      </section>
+      <p id="offline-notice" class="notice" hidden>
+        <strong>打印机离线</strong>
+        <span>暂时无法开始打印，现有队列已保留。</span>
+      </p>
 
-      <section>
-        <h2>Queue</h2>
-        <ol id="queue"></ol>
-      </section>
+      <div class="dashboard-grid">
+        <section class="dashboard-card current-print-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">实时状态</p>
+              <h2>当前打印</h2>
+            </div>
+            <span id="current-phase" class="phase-badge">无任务</span>
+          </div>
+          <p id="current-job" class="current-job">暂无活动任务</p>
+          <div class="progress-heading">
+            <span>打印进度</span>
+            <strong id="printer-progress">—</strong>
+          </div>
+          <progress id="printer-progress-bar" max="100" value="0" aria-label="打印进度"></progress>
+          <dl class="print-details">
+            <div class="print-task">
+              <dt>打印文件</dt>
+              <dd id="printer-task">—</dd>
+            </div>
+            <div>
+              <dt>剩余时间</dt>
+              <dd id="printer-remaining">—</dd>
+            </div>
+            <div>
+              <dt>当前层数</dt>
+              <dd id="printer-layer">—</dd>
+            </div>
+          </dl>
+        </section>
 
-      <section>
-        <h2>Submit Print Job</h2>
-        <form id="job-form">
-          <label>
-            Name
-            <input name="display_name" required>
-          </label>
-          <label>
-            Project Name
-            <input name="project_name" required>
-          </label>
-          <label>
-            Print File
-            <input name="file" type="file" accept=".3mf,.gcode.3mf" required>
-          </label>
-          <button type="submit">Join Queue</button>
-        </form>
-        <p id="message" role="status"></p>
-      </section>
+        <section class="dashboard-card queue-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">即将打印</p>
+              <h2>等待队列</h2>
+            </div>
+            <span id="queue-count" class="count-badge">0 个任务</span>
+          </div>
+          <ol id="queue" class="task-list scroll-list"></ol>
+        </section>
 
-      <section>
-        <h2>Print History</h2>
-        <ol id="history"></ol>
-      </section>
+        <section class="dashboard-card telemetry-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">实时遥测</p>
+              <h2>设备状态</h2>
+            </div>
+          </div>
+          <dl class="metric-grid">
+            <div>
+              <dt>喷嘴温度</dt>
+              <dd id="printer-nozzle">—</dd>
+            </div>
+            <div>
+              <dt>热床温度</dt>
+              <dd id="printer-bed">—</dd>
+            </div>
+            <div>
+              <dt>腔体温度</dt>
+              <dd id="printer-chamber">—</dd>
+            </div>
+            <div>
+              <dt>Wi-Fi 信号</dt>
+              <dd id="printer-wifi">—</dd>
+            </div>
+            <div>
+              <dt>冷却风扇</dt>
+              <dd id="printer-cooling-fan">—</dd>
+            </div>
+            <div>
+              <dt>热端风扇</dt>
+              <dd id="printer-heatbreak-fan">—</dd>
+            </div>
+            <div>
+              <dt>辅助风扇 1</dt>
+              <dd id="printer-auxiliary-fan-1">—</dd>
+            </div>
+            <div>
+              <dt>辅助风扇 2</dt>
+              <dd id="printer-auxiliary-fan-2">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="dashboard-card submit-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">加入队列</p>
+              <h2>提交打印任务</h2>
+            </div>
+          </div>
+          <form id="job-form">
+            <label>
+              姓名
+              <input name="display_name" autocomplete="name" required>
+            </label>
+            <label>
+              项目名称
+              <input name="project_name" required>
+            </label>
+            <label>
+              打印文件
+              <input name="file" type="file" accept=".3mf,.gcode.3mf" required>
+            </label>
+            <button type="submit">加入打印队列</button>
+          </form>
+          <p id="message" role="status"></p>
+        </section>
+
+        <section class="dashboard-card ams-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">材料状态</p>
+              <h2>AMS 材料</h2>
+            </div>
+          </div>
+          <div id="ams-status" class="ams-status"></div>
+        </section>
+
+        <section class="dashboard-card history-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">最近记录</p>
+              <h2>打印历史</h2>
+            </div>
+          </div>
+          <ol id="history" class="history-list scroll-list"></ol>
+        </section>
+      </div>
     </main>
-    <script src="/app.js?v=printer-status-2"></script>
+    <script src="/app.js?v=queue-dashboard-1"></script>
   </body>
 </html>
