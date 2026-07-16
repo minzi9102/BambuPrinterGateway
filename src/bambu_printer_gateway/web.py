@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from .database import open_database
 from .gateway import BambuAdapter, MQTT_RECONNECT_SECONDS, PrinterService
 from .jobs import Job, JobStateService, JobStatus, QueueError, QueueService, now
-from .phase0 import Phase0Error, PrinterConfig, validate_print_file
+from .phase0 import Phase0Error, PrinterConfig, print_file_filament_types, validate_print_file
 
 CHUNK_SIZE = 1024 * 1024
 PREVIEW_PATH = "Metadata/plate_1.png"
@@ -146,6 +146,21 @@ def ams_slot_from_body(body: dict[str, Any] | None) -> int:
     if isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot <= 3:
         raise HTTPException(400, "ams_slot must be an integer from 0 to 3.")
     return slot
+
+
+def ensure_filament_matches(path: Path, raw_status: dict[str, Any], ams_slot: int) -> None:
+    try:
+        expected = print_file_filament_types(path)
+    except Phase0Error as error:
+        raise HTTPException(409, str(error)) from error
+    if len(expected) != 1:
+        raise HTTPException(409, "当前系统不支持多耗材打印文件。")
+    tray = next((item for item in ams_tray_response(raw_status) if item["slot"] == ams_slot), None)
+    actual = str((tray or {}).get("type") or "").strip()
+    if not actual:
+        raise HTTPException(409, f"AMS Slot {ams_slot + 1} 未报告耗材类型。")
+    if actual.casefold() != expected[0].casefold():
+        raise HTTPException(409, f"打印文件需要 {expected[0]}，但 AMS Slot {ams_slot + 1} 是 {actual}。")
 
 
 def move_direction_from_body(body: dict[str, Any] | None) -> str:
@@ -557,6 +572,11 @@ def create_app(
             job = queue.get_next_job()
             if not job:
                 raise HTTPException(404, "No queued jobs.")
+            ensure_filament_matches(
+                Path(job.stored_path),
+                getattr(printer_service, "raw_status", None) or {},
+                ams_slot,
+            )
             remote_path = f"cache/{job.remote_filename}"
             job = states.change_job_state(job.id, JobStatus.UPLOADING)
             await hub.broadcast({"type": "queue.changed"})

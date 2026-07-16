@@ -11,14 +11,16 @@ from fastapi.testclient import TestClient
 
 from bambu_printer_gateway.database import open_database
 from bambu_printer_gateway.jobs import JobStatus, QueueService
-from bambu_printer_gateway.phase0 import START_GCODE
+from bambu_printer_gateway.phase0 import SLICE_INFO, START_GCODE
 from bambu_printer_gateway.web import active_printer_error, create_app
 
 
-def sliced_3mf() -> bytes:
+def sliced_3mf(material: str | None = "PLA") -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as archive:
         archive.writestr(START_GCODE, "G28")
+        if material:
+            archive.writestr(SLICE_INFO, f'<config><plate><filament type="{material}"/></plate></config>')
     return stream.getvalue()
 
 
@@ -26,7 +28,10 @@ class FakePrinter:
     def __init__(self, *, connected=True, state="idle"):
         self.connected = connected
         self.normalized_state = state
-        self.raw_status = {"mc_percent": 0}
+        self.raw_status = {
+            "mc_percent": 0,
+            "ams": {"ams": [{"tray": [{"id": str(slot), "tray_type": "PLA"} for slot in range(4)]}]},
+        }
         self.starts = 0
         self.stops = 0
 
@@ -99,11 +104,11 @@ class AdminStartTests(unittest.TestCase):
     def auth(self):
         return ("admin", "secret")
 
-    def post_job(self, client: TestClient, name: str = "Alice"):
+    def post_job(self, client: TestClient, name: str = "Alice", material: str | None = "PLA"):
         return client.post(
             "/api/jobs",
             data={"display_name": name},
-            files={"file": (f"{name}.gcode.3mf", sliced_3mf(), "application/octet-stream")},
+            files={"file": (f"{name}.gcode.3mf", sliced_3mf(material), "application/octet-stream")},
         )
 
     def start_next(self, client: TestClient, ams_slot=0):
@@ -346,6 +351,31 @@ class AdminStartTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(adapter.started[0][2], 2)
+
+    def test_start_next_rejects_mismatched_filament_before_upload(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.post_job(client, material="PETG")
+
+            response = self.start_next(client)
+
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(response.json()["detail"], "打印文件需要 PETG，但 AMS Slot 1 是 PLA。")
+            self.assertEqual(client.get("/api/queue").json()["jobs"][0]["status"], "QUEUED")
+            self.assertEqual(adapter.uploads, [])
+
+    def test_start_next_rejects_missing_filament_metadata(self):
+        printer = FakePrinter()
+        adapter = FakeAdapter(printer)
+        with self.make_client(printer, adapter) as (client, _):
+            self.post_job(client, material=None)
+
+            response = self.start_next(client)
+
+            self.assertEqual(response.status_code, 409)
+            self.assertIn(SLICE_INFO, response.json()["detail"])
+            self.assertEqual(adapter.uploads, [])
 
     def test_start_broadcasts_active_state_changes(self):
         printer = FakePrinter()

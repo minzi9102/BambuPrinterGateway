@@ -11,6 +11,7 @@ import subprocess
 import threading
 import time
 import uuid
+import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -20,6 +21,8 @@ from typing import Callable
 from bambu_connect import BambuClient
 
 START_GCODE = "Metadata/plate_1.gcode"
+SLICE_INFO = "Metadata/slice_info.config"
+SLICE_INFO_MAX_BYTES = 1024 * 1024
 STATUS_FIELDS = (
     "gcode_state",
     "subtask_name",
@@ -155,6 +158,29 @@ def validate_print_file(path: Path) -> str:
     if START_GCODE not in entries:
         raise Phase0Error(f"上游 start_print() 固定需要 {START_GCODE}")
     return START_GCODE
+
+
+def print_file_filament_types(path: Path) -> tuple[str, ...]:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            with archive.open(SLICE_INFO) as stream:
+                content = stream.read(SLICE_INFO_MAX_BYTES + 1)
+    except (KeyError, OSError, zipfile.BadZipFile) as error:
+        raise Phase0Error(f"3MF 缺少可读的 {SLICE_INFO}") from error
+    if len(content) > SLICE_INFO_MAX_BYTES:
+        raise Phase0Error(f"3MF 中的 {SLICE_INFO} 过大")
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError as error:
+        raise Phase0Error(f"3MF 缺少可读的 {SLICE_INFO}") from error
+    types = tuple(
+        dict.fromkeys(
+            value for item in root.findall(".//filament") if (value := item.get("type", "").strip())
+        )
+    )
+    if not types:
+        raise Phase0Error("3MF 未声明耗材类型")
+    return types
 
 
 def find_curl(run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> str:
